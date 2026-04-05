@@ -11,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { getJob, updateJob } from "@/lib/api";
 
-export default function EditJobPage({ params }: { params: { id: string } }) {
+export default function EditJobPage({ params }: { params: any }) {
+  const id = params.id;
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
@@ -30,7 +31,7 @@ export default function EditJobPage({ params }: { params: { id: string } }) {
   });
 
   useEffect(() => {
-    getJob(params.id).then((job) => {
+    getJob(id).then((job) => {
       setForm({
         title: job.title,
         department: job.department,
@@ -47,11 +48,11 @@ export default function EditJobPage({ params }: { params: { id: string } }) {
       });
       setLoading(false);
     });
-  }, [params.id]);
+  }, [id]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    await updateJob(Number(params.id), {
+    await updateJob(Number(id), {
       ...form,
       skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
       custom_fields: {},

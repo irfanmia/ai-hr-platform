@@ -11,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getJob } from "@/lib/api";
 import type { Job } from "@/lib/types";
 
-export default function JobDetailPage({ params }: { params: { id: string } }) {
+export default function JobDetailPage({ params }: { params: any }) {
+  const id = params.id;
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -19,14 +20,14 @@ export default function JobDetailPage({ params }: { params: { id: string } }) {
     async function loadJob() {
       setLoading(true);
       try {
-        const data = await getJob(params.id);
+        const data = await getJob(id);
         setJob(data);
       } finally {
         setLoading(false);
       }
     }
     loadJob();
-  }, [params.id]);
+  }, [id]);
 
   if (loading) {
     return (

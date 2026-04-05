@@ -15,7 +15,8 @@ import type { InterviewQuestion, Job } from "@/lib/types";
 
 const steps = ["Personal Info", "Resume Upload", "AI Interview", "Done"];
 
-export default function ApplyPage({ params }: { params: { id: string } }) {
+export default function ApplyPage({ params }: { params: any }) {
+  const id = params.id;
   const [step, setStep] = useState(1);
   const [job, setJob] = useState<Job | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);
@@ -36,8 +37,8 @@ export default function ApplyPage({ params }: { params: { id: string } }) {
   });
 
   useEffect(() => {
-    getJob(params.id).then(setJob);
-  }, [params.id]);
+    getJob(id).then(setJob);
+  }, [id]);
 
   const currentQuestion = questions[questionIndex];
   const interviewProgress = useMemo(
@@ -49,7 +50,7 @@ export default function ApplyPage({ params }: { params: { id: string } }) {
     if (!resumeFile) return;
     setUploadProgress(15);
     const result = await submitApplication({
-      job: Number(params.id),
+      job: Number(id),
       resume: resumeFile,
       ...form,
     });

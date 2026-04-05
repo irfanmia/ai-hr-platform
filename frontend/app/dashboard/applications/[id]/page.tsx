@@ -13,16 +13,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getDashboardApplication, updateApplicationStatus } from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/lib/types";
 
-export default function ApplicationDetailPage({ params }: { params: { id: string } }) {
+export default function ApplicationDetailPage({ params }: { params: any }) {
+  const id = params.id;
   const [application, setApplication] = useState<Application | null>(null);
   const [status, setStatus] = useState<ApplicationStatus>("new");
 
   useEffect(() => {
-    getDashboardApplication(params.id).then((data) => {
+    getDashboardApplication(id).then((data) => {
       setApplication(data);
       setStatus(data.status);
     });
-  }, [params.id]);
+  }, [id]);
 
   if (!application) {
     return <Skeleton className="h-96 rounded-3xl" />;
