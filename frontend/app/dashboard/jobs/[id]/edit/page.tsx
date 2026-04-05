@@ -54,6 +54,7 @@ export default function EditJobPage({ params }: { params: any }) {
     event.preventDefault();
     await updateJob(Number(id), {
       ...form,
+      location_type: form.location_type as any,
       skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
       custom_fields: {},
     });
