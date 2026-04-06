@@ -99,7 +99,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
 
 class DashboardApplicationsView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         queryset = Application.objects.select_related("job").all()
@@ -122,7 +122,7 @@ class DashboardApplicationsView(views.APIView):
 
 
 class DashboardStatsView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         today = timezone.now().date()
@@ -149,7 +149,7 @@ class DashboardStatsView(views.APIView):
 
 
 class ApplicationDetailView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request, pk: int):
         application = get_object_or_404(Application.objects.select_related("job"), pk=pk)
