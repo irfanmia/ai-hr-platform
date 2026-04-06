@@ -14,7 +14,7 @@ export function PublicNav() {
             Jobs
           </Link>
           <Button asChild variant="outline" size="sm">
-            <Link href="/login">HR Login</Link>
+            <Link href="/login">Login</Link>
           </Button>
         </div>
       </div>
