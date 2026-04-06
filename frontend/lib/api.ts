@@ -60,9 +60,9 @@ export async function submitApplication(payload: ApplicationSubmission) {
   if (payload.linkedin_url) formData.append("linkedin_url", payload.linkedin_url);
   formData.append("custom_answers", JSON.stringify(payload.custom_answers ?? {}));
 
-  const response = await api.post<{ id: number }>("/applications/", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  // Do NOT set Content-Type manually — axios sets it automatically with the correct
+  // multipart boundary when FormData is passed. Setting it manually breaks uploads.
+  const response = await api.post<{ id: number }>("/applications/", formData);
   return response.data;
 }
 
