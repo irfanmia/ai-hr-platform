@@ -25,7 +25,20 @@ api.interceptors.request.use((config) => {
 });
 
 export async function getJobs(params?: Record<string, string | string[] | undefined>) {
-  const response = await api.get<Job[]>("/jobs/", { params });
+  // Build URLSearchParams manually so arrays serialize as repeated keys
+  // e.g. location_type=remote&location_type=hybrid (not location_type[]=...)
+  const query = new URLSearchParams();
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (!value) continue;
+      if (Array.isArray(value)) {
+        value.forEach(v => query.append(key, v));
+      } else {
+        query.append(key, value);
+      }
+    }
+  }
+  const response = await api.get<Job[]>(`/jobs/?${query.toString()}`);
   return response.data;
 }
 

@@ -25,23 +25,24 @@ export default function JobsPage() {
   const [experienceMax, setExperienceMax] = useState("");
 
   useEffect(() => {
-    async function loadJobs() {
+    // Debounce text inputs by 400ms; location checkboxes fire immediately
+    const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const data = await getJobs({
-          search,
+          search: search || undefined,
           skills: skillSearch || undefined,
           min_experience: experienceMin || undefined,
           max_experience: experienceMax || undefined,
-          location_type: selectedLocations,
+          location_type: selectedLocations.length > 0 ? selectedLocations : undefined,
         });
         setJobs(data);
       } finally {
         setLoading(false);
       }
-    }
+    }, 400);
 
-    loadJobs();
+    return () => clearTimeout(timer);
   }, [experienceMax, experienceMin, search, selectedLocations, skillSearch]);
 
   return (
@@ -57,6 +58,17 @@ export default function JobsPage() {
         <div className="mt-10 grid gap-8 lg:grid-cols-[280px_1fr]">
           <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
             <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-700">Filters</span>
+                {(selectedLocations.length > 0 || experienceMin || experienceMax || skillSearch) && (
+                  <button
+                    className="text-xs text-indigo-600 hover:underline"
+                    onClick={() => { setSelectedLocations([]); setExperienceMin(""); setExperienceMax(""); setSkillSearch(""); }}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
               <div className="space-y-2">
                 <Label>Location Type</Label>
                 {locationOptions.map((option) => (
