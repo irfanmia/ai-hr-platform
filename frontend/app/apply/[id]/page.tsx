@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { generateQuestions, getJob, submitAnswers, submitApplication } from "@/lib/api";
 import type { InterviewQuestion, Job } from "@/lib/types";
 
-const STEPS = ["Account", "Personal Info", "Resume Upload", "AI Interview", "Done"];
+const STEPS = ["Sign In", "Personal Info", "Resume Upload", "AI Interview", "Done"];
 
 async function registerCandidate(name: string, email: string, password: string) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register/`, {
@@ -36,6 +36,12 @@ async function loginCandidate(email: string, password: string) {
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "Login failed");
   return data;
+}
+
+function decodeJwt(token: string) {
+  try {
+    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+  } catch { return null; }
 }
 
 export default function ApplyPage({ params }: { params: any }) {
@@ -69,6 +75,17 @@ export default function ApplyPage({ params }: { params: any }) {
 
   useEffect(() => {
     getJob(id).then(setJob);
+
+    // If already signed in as candidate, skip account step
+    const token = localStorage.getItem("candidate_access_token");
+    if (token) {
+      const payload = decodeJwt(token);
+      if (payload && !payload.is_staff && !payload.is_superuser) {
+        // Pre-fill email from token and jump to personal info
+        setForm((f) => ({ ...f, email: payload.email || "" }));
+        setStep(2);
+      }
+    }
   }, [id]);
 
   const currentQuestion = questions[questionIndex];
