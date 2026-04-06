@@ -114,7 +114,7 @@ export default function ApplyPage({ params }: { params: any }) {
     setUploadProgress(100);
     setStep(4);
     setAnalyzing(true);
-    await new Promise((resolve) => setTimeout(resolve, 2200));
+    // Removed artificial delay — real processing is fast enough
     const generated = await generateQuestions(result.id);
     setQuestions(generated.questions);
     setAnalyzing(false);
