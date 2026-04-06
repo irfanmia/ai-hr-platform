@@ -29,6 +29,8 @@ export default function EditJobPage({ params }: { params: any }) {
     requirements: "",
     responsibilities: "",
     is_active: true,
+    resume_match_weight: 50,
+    interview_weight: 50,
   });
 
   useEffect(() => {
@@ -46,6 +48,8 @@ export default function EditJobPage({ params }: { params: any }) {
         requirements: job.requirements,
         responsibilities: job.responsibilities,
         is_active: job.is_active,
+        resume_match_weight: (job as any).resume_match_weight ?? 50,
+        interview_weight: (job as any).interview_weight ?? 50,
       });
       setLoading(false);
     });
@@ -58,6 +62,8 @@ export default function EditJobPage({ params }: { params: any }) {
       location_type: form.location_type as any,
       skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
       custom_fields: {},
+      resume_match_weight: form.resume_match_weight,
+      interview_weight: form.interview_weight,
     });
     router.push("/dashboard/jobs");
   }
@@ -91,6 +97,51 @@ export default function EditJobPage({ params }: { params: any }) {
             <Label className="mb-2 block">Max experience</Label>
             <Input type="number" value={form.experience_years_max} onChange={(e) => setForm((current) => ({ ...current, experience_years_max: Number(e.target.value) }))} />
           </div>
+          {/* Scoring Weights */}
+          <div className="md:col-span-2">
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-indigo-900">AI Scoring Weights</p>
+                <p className="text-xs text-indigo-600 mt-0.5">Must add up to 100. Changing this affects new applications only.</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Resume Match Weight (%)</label>
+                  <input type="number" min={0} max={100}
+                    value={form.resume_match_weight}
+                    onChange={e => { const v = Math.min(100, Math.max(0, Number(e.target.value))); setForm(f => ({ ...f, resume_match_weight: v, interview_weight: 100 - v })); }}
+                    className="flex h-10 w-full rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Interview Score Weight (%)</label>
+                  <input type="number" min={0} max={100}
+                    value={form.interview_weight}
+                    onChange={e => { const v = Math.min(100, Math.max(0, Number(e.target.value))); setForm(f => ({ ...f, interview_weight: v, resume_match_weight: 100 - v })); }}
+                    className="flex h-10 w-full rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="bg-indigo-500 transition-all" style={{ width: `${form.resume_match_weight}%` }} />
+                <div className="bg-emerald-500 transition-all" style={{ width: `${form.interview_weight}%` }} />
+              </div>
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Resume: {form.resume_match_weight}%</span>
+                <span>Interview: {form.interview_weight}%</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[{label:"Equal (50/50)",r:50,i:50},{label:"Resume-heavy (70/30)",r:70,i:30},{label:"Interview-heavy (30/70)",r:30,i:70}].map(p => (
+                  <button key={p.label} type="button"
+                    onClick={() => setForm(f => ({ ...f, resume_match_weight: p.r, interview_weight: p.i }))}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      form.resume_match_weight === p.r ? "border-indigo-500 bg-indigo-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-indigo-400"
+                    }`}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="md:col-span-2">
             <Button type="submit">Save changes</Button>
           </div>

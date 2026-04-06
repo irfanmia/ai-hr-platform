@@ -92,29 +92,31 @@ def evaluate_answers(application: Application, questions: list[dict], answers: d
 
     avg = round(mean([s["score"] for s in scored_answers])) if scored_answers else 60
 
-    # ── 50/50 scoring split ──
-    # Interview questions are worth 50 pts total
-    # Resume match is worth 50 pts (from match_result stored in parsed_resume)
+    # ── Weighted scoring: resume match + interview (weights set per job by HR) ──
     match_result = parsed_resume.get("match_result", {})
-    resume_match_score = match_result.get("resume_match_score", None)
+    resume_match_score_raw = match_result.get("resume_match_score", None)  # 0-50
 
-    # Scale interview avg (0-100) down to 0-50
-    interview_score_50 = round(avg * 0.5)  # 50% weight
+    # Get weights from job (default 50/50)
+    resume_weight = getattr(application.job, "resume_match_weight", 50)  # HR-configured
+    interview_weight = getattr(application.job, "interview_weight", 50)   # HR-configured
+    total_weight = resume_weight + interview_weight or 100
 
-    if resume_match_score is not None:
-        # Combined: resume match (0-50) + interview (0-50) = total (0-100)
-        combined_score = resume_match_score + interview_score_50
-        resume_strength = resume_match_score * 2  # scale back to 0-100 for display
-        actual_performance = interview_score_50 * 2  # scale back to 0-100 for display
+    if resume_match_score_raw is not None:
+        # Scale resume match (0-50 raw) to job's weight
+        resume_component = round((resume_match_score_raw / 50) * resume_weight)
+        # Scale interview avg (0-100) to job's interview weight
+        interview_component = round((avg / 100) * interview_weight)
+        combined_score = resume_component + interview_component
+        resume_strength = round(resume_match_score_raw * 2)   # display as 0-100
+        actual_performance = avg  # interview score display as 0-100
     else:
-        # Fallback: no match result, use old method
+        # Fallback
         skill_count = len(parsed_resume.get("extracted_skills", parsed_resume.get("skills", [])))
         exp_years = parsed_resume.get("experience_years", 1)
         resume_strength = min(95, 50 + skill_count * 4 + exp_years * 3)
         actual_performance = min(95, avg + 5)
         combined_score = avg
 
-    # Use combined score as the overall score
     avg = combined_score
 
     # Gap analysis
