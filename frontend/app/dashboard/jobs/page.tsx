@@ -31,7 +31,7 @@ export default function DashboardJobsPage() {
         </Button>
       </CardHeader>
       <CardContent>
-        <Table>
+        <div className="overflow-x-auto -mx-2"><Table>
           <TableHeader>
             <TableRow>
               <TableHead>Title</TableHead>
@@ -69,7 +69,7 @@ export default function DashboardJobsPage() {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </Table></div>
       </CardContent>
     </Card>
   );

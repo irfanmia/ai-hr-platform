@@ -42,7 +42,7 @@ export default function DashboardApplicationsPage() {
         <CardTitle>Applications</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div>
             <Label className="mb-2 block">Job</Label>
             <Select value={filters.job} onValueChange={(value) => setFilters((current) => ({ ...current, job: value }))}>
@@ -85,6 +85,7 @@ export default function DashboardApplicationsPage() {
           </div>
         </div>
 
+        <div className="overflow-x-auto -mx-2">
         <Table>
           <TableHeader>
             <TableRow>
@@ -117,6 +118,7 @@ export default function DashboardApplicationsPage() {
             ))}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

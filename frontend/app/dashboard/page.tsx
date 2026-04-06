@@ -35,12 +35,12 @@ export default function DashboardPage() {
         <h1 className="mt-2 text-3xl font-semibold text-slate-950">Recruiting overview</h1>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statConfig.map(({ key, label }) => (
           <Card key={key} className="rounded-3xl">
-            <CardContent className="p-6">
-              <p className="text-sm text-slate-500">{label}</p>
-              <p className="mt-3 text-4xl font-semibold text-slate-950">{stats[key]}</p>
+            <CardContent className="p-4 lg:p-6">
+              <p className="text-xs text-slate-500 lg:text-sm">{label}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950 lg:mt-3 lg:text-4xl">{stats[key]}</p>
             </CardContent>
           </Card>
         ))}
@@ -54,6 +54,7 @@ export default function DashboardPage() {
           </Link>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto -mx-2">
           <Table>
             <TableHeader>
               <TableRow>
@@ -78,6 +79,7 @@ export default function DashboardPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

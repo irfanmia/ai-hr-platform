@@ -6,7 +6,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AuthGuard>
       <div className="flex min-h-screen bg-slate-50">
         <DashboardSidebar />
-        <main className="flex-1 px-6 py-8">{children}</main>
+        {/* pt-16 on mobile for fixed top bar, 0 on desktop */}
+        <main className="flex-1 px-4 py-6 pt-20 lg:px-6 lg:py-8 lg:pt-8 min-w-0">
+          {children}
+        </main>
       </div>
     </AuthGuard>
   );

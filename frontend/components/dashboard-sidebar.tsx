@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Briefcase, ClipboardList, LayoutDashboard, LogOut } from "lucide-react";
+import { Briefcase, ClipboardList, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,17 @@ const links = [
 export function DashboardSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  // Close sidebar on route change
+  useEffect(() => { setOpen(false); }, [pathname]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   function handleLogout() {
     localStorage.removeItem("hr_access_token");
@@ -23,34 +35,89 @@ export function DashboardSidebar() {
     router.push("/admin-login");
   }
 
-  return (
-    <aside className="flex min-h-screen w-full max-w-72 flex-col bg-indigo-950 px-5 py-6 text-white">
-      <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200">Recruiter Console</p>
-        <h2 className="mt-2 text-2xl font-semibold">AI HR Platform</h2>
+  const SidebarContent = () => (
+    <div className="flex h-full flex-col">
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200">Recruiter Console</p>
+          <h2 className="mt-2 text-xl font-semibold">AI HR Platform</h2>
+        </div>
+        {/* Close button — mobile only */}
+        <button
+          className="ml-2 rounded-lg p-1.5 text-indigo-200 hover:bg-indigo-900 lg:hidden"
+          onClick={() => setOpen(false)}
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
-      <nav className="space-y-2">
+
+      <nav className="space-y-1.5">
         {links.map((link) => {
           const Icon = link.icon;
+          const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(link.href));
           return (
             <Link
               key={link.href}
               href={link.href}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition",
-                pathname === link.href ? "bg-white text-indigo-950" : "text-indigo-100 hover:bg-indigo-900"
+                isActive ? "bg-white text-indigo-950" : "text-indigo-100 hover:bg-indigo-900"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 shrink-0" />
               {link.label}
             </Link>
           );
         })}
       </nav>
-      <Button variant="outline" className="mt-auto border-indigo-400 bg-transparent text-white hover:bg-indigo-900" onClick={handleLogout}>
+
+      <Button
+        variant="outline"
+        className="mt-auto border-indigo-400 bg-transparent text-white hover:bg-indigo-900"
+        onClick={handleLogout}
+      >
         <LogOut className="mr-2 h-4 w-4" />
         Logout
       </Button>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* ── Mobile top bar ── */}
+      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-indigo-950 px-4 py-3 text-white lg:hidden">
+        <div>
+          <p className="text-xs font-medium text-indigo-300">Recruiter Console</p>
+          <h2 className="text-base font-semibold">AI HR Platform</h2>
+        </div>
+        <button
+          onClick={() => setOpen(true)}
+          className="rounded-lg p-2 text-indigo-200 hover:bg-indigo-900"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* ── Mobile overlay ── */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* ── Mobile drawer ── */}
+      <aside className={cn(
+        "fixed top-0 left-0 z-50 h-full w-72 bg-indigo-950 px-5 py-6 text-white transition-transform duration-300 lg:hidden",
+        open ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <SidebarContent />
+      </aside>
+
+      {/* ── Desktop sidebar ── */}
+      <aside className="hidden min-h-screen w-72 shrink-0 flex-col bg-indigo-950 px-5 py-6 text-white lg:flex">
+        <SidebarContent />
+      </aside>
+    </>
   );
 }

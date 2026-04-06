@@ -245,7 +245,7 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
                 <Card className="rounded-3xl">
                   <CardHeader><CardTitle>Claim Validation</CardTitle></CardHeader>
                   <CardContent>
-                    <Table>
+                    <div className="overflow-x-auto"><Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Claim</TableHead>
@@ -268,7 +268,7 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
                           </TableRow>
                         ))}
                       </TableBody>
-                    </Table>
+                    </Table></div>
                   </CardContent>
                 </Card>
               )}
