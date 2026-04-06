@@ -68,6 +68,9 @@ export default function ApplyPage({ params }: { params: any }) {
   const [uploadError, setUploadError] = useState("");
   const [selectedFileName, setSelectedFileName] = useState("");
   const uploadRef = useRef<AbortController | null>(null);
+  const [uploadAttempts, setUploadAttempts] = useState(0);
+  const MAX_ATTEMPTS = 3;
+  const [cachedQuestions, setCachedQuestions] = useState<InterviewQuestion[]>([]);
 
   // Questions loading
   const [questionsLoading, setQuestionsLoading] = useState(false);
@@ -162,10 +165,42 @@ export default function ApplyPage({ params }: { params: any }) {
     try {
       const result = await submitApplication({ job: Number(id), resume: file, ...effectiveForm });
       clearInterval(progressInterval);
-      setUploadProgress(100);
+      setUploadProgress(90);
       setUploadedAppId(result.id);
       setApplicationId(result.id);
-      setUploadState("ready");
+
+      // Immediately validate the uploaded document with AI
+      setUploadProgress(95);
+      try {
+        const generated = await generateQuestions(result.id);
+        // Validation passed — cache questions so submit is instant
+        setCachedQuestions(generated.questions || []);
+        setUploadProgress(100);
+        setUploadState("ready");
+      } catch (validationErr: any) {
+        // Document rejected by AI
+        const attempt = uploadAttempts + 1;
+        setUploadAttempts(attempt);
+        setUploadProgress(0);
+
+        if (attempt >= MAX_ATTEMPTS) {
+          setUploadState("error");
+          setUploadError(
+            `You have reached the maximum of ${MAX_ATTEMPTS} upload attempts. ` +
+            `Please contact support at support@aihr.com for assistance.`
+          );
+        } else {
+          const remaining = MAX_ATTEMPTS - attempt;
+          const msg = validationErr?.response?.data?.message ||
+            "The uploaded file doesn't appear to be a resume.";
+          setUploadState("error");
+          setUploadError(
+            `⚠️ ${msg} ` +
+            `Please upload a proper CV/resume in PDF, DOC, or DOCX format. ` +
+            `(${remaining} attempt${remaining > 1 ? "s" : ""} remaining)`
+          );
+        }
+      }
     } catch (err: any) {
       clearInterval(progressInterval);
       setUploadState("error");
@@ -177,19 +212,18 @@ export default function ApplyPage({ params }: { params: any }) {
   // ── Submit: trigger questions (file already uploaded) ──
   async function handleSubmitAndStartInterview() {
     if (!uploadedAppId) return;
-    setQuestionsLoading(true);
     setStep(4);
+    // Use cached questions from validation step — no extra API call needed
+    if (cachedQuestions.length > 0) {
+      setQuestions(cachedQuestions);
+      return;
+    }
+    // Fallback: fetch questions if not cached
+    setQuestionsLoading(true);
     try {
       const generated = await generateQuestions(uploadedAppId);
       setQuestions(generated.questions);
-    } catch (err: any) {
-      // Check if backend rejected the document as not a resume
-      const msg = err?.response?.data?.message || "";
-      if (err?.response?.data?.error === "not_a_resume" || msg) {
-        setUploadState("error");
-        setUploadError(msg || "The uploaded file doesn't appear to be a resume. Please upload a proper CV/resume.");
-        setStep(3); // Go back to upload step
-      }
+    } catch {
       setQuestions([]);
     } finally {
       setQuestionsLoading(false);
@@ -356,7 +390,13 @@ export default function ApplyPage({ params }: { params: any }) {
                     type="file"
                     className="hidden"
                     accept=".pdf,.doc,.docx"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+                    disabled={uploadAttempts >= MAX_ATTEMPTS}
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f && uploadAttempts < MAX_ATTEMPTS) handleFileSelect(f);
+                      // Reset file input so same file can be re-selected
+                      e.target.value = "";
+                    }}
                   />
                 </label>
 
@@ -369,9 +409,10 @@ export default function ApplyPage({ params }: { params: any }) {
                         uploadState === "error" ? "text-red-500" :
                         "text-indigo-600"
                       }>
-                        {uploadState === "uploading" ? "Uploading & analysing your resume..." :
-                         uploadState === "ready" ? "✓ Ready — AI has received your resume" :
-                         uploadState === "error" ? "Upload failed" : ""}
+                        {uploadState === "uploading" ?
+                          (uploadProgress < 90 ? "Uploading resume..." : "Validating document with AI...") :
+                         uploadState === "ready" ? "✓ Verified — your resume has been accepted" :
+                         uploadState === "error" ? (uploadAttempts >= MAX_ATTEMPTS ? "Maximum attempts reached" : "Invalid document") : ""}
                       </span>
                       <span className="text-slate-400">{Math.round(uploadProgress)}%</span>
                     </div>
@@ -384,7 +425,22 @@ export default function ApplyPage({ params }: { params: any }) {
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
-                    {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
+                    {uploadError && (
+                      <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 space-y-1">
+                        <p className="text-sm text-red-600">{uploadError}</p>
+                        {uploadAttempts >= MAX_ATTEMPTS && (
+                          <p className="text-xs text-red-500">
+                            Need help?{" "}
+                            <a href="mailto:support@aihr.com" className="font-medium underline">Contact support</a>
+                          </p>
+                        )}
+                        {uploadAttempts > 0 && uploadAttempts < MAX_ATTEMPTS && (
+                          <p className="text-xs text-slate-500">
+                            Attempt {uploadAttempts} of {MAX_ATTEMPTS}. Upload a different file to try again.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
