@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 import { ScoreGauge } from "@/components/score-gauge";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,8 @@ import { getDashboardApplication, updateApplicationStatus } from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/lib/types";
 
 export default function ApplicationDetailPage({ params }: { params: any }) {
-  const id = params.id;
+  const resolvedParams = typeof params.then === "function" ? use(params) : params;
+  const id = resolvedParams?.id ?? "";
   const [application, setApplication] = useState<Application | null>(null);
   const [status, setStatus] = useState<ApplicationStatus>("new");
 

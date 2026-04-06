@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { getJob, updateJob } from "@/lib/api";
 
 export default function EditJobPage({ params }: { params: any }) {
-  const id = params.id;
+  const resolvedParams = typeof params.then === "function" ? use(params) : params;
+  const id = resolvedParams?.id ?? "";
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({

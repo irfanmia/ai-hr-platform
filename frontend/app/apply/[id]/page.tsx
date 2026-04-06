@@ -2,7 +2,7 @@
 
 import { CheckCircle, Loader2, UploadCloud } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { use, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { PublicNav } from "@/components/public-nav";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,9 @@ async function loginCandidate(email: string, password: string) {
 type UploadState = "idle" | "uploading" | "processing" | "ready" | "error";
 
 export default function ApplyPage({ params }: { params: any }) {
-  const id = params.id;
+  // Next.js 16: params is a Promise — unwrap with React.use()
+  const resolvedParams = typeof params.then === "function" ? use(params) : params;
+  const id = resolvedParams?.id ?? "";
   const [step, setStep] = useState(1);
   const [job, setJob] = useState<Job | null>(null);
   const [applicationId, setApplicationId] = useState<number | null>(null);

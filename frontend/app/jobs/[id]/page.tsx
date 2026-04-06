@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 import { PublicNav } from "@/components/public-nav";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,8 @@ import { getJob } from "@/lib/api";
 import type { Job } from "@/lib/types";
 
 export default function JobDetailPage({ params }: { params: any }) {
-  const id = params.id;
+  const resolvedParams = typeof params.then === "function" ? use(params) : params;
+  const id = resolvedParams?.id ?? "";
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
 
