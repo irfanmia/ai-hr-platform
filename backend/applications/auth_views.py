@@ -74,6 +74,7 @@ def candidate_register(request):
     access["is_staff"] = user.is_staff
     access["is_superuser"] = user.is_superuser
     access["email"] = email
+    access["name"] = name
     return Response({
         "access": str(access),
         "refresh": str(refresh),

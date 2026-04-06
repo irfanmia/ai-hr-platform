@@ -97,18 +97,28 @@ export default function ApplyPage({ params }: { params: any }) {
   async function handleFileSelect(file: File) {
     // Ensure candidate_name is set — fallback to email prefix or auth token name
     const effectiveForm = { ...form };
-    if (!effectiveForm.candidate_name.trim()) {
-      const token = localStorage.getItem("candidate_access_token");
-      const payload = token ? decodeJwt(token) : null;
-      effectiveForm.candidate_name = payload?.name ||
-        (effectiveForm.email ? effectiveForm.email.split("@")[0] : "Candidate");
-      setForm(effectiveForm);
-    }
+
+    // Get name + email from JWT token if not already set
+    const token = localStorage.getItem("candidate_access_token");
+    const payload = token ? decodeJwt(token) : null;
+
     if (!effectiveForm.email.trim()) {
+      effectiveForm.email = payload?.email || "";
+    }
+    if (!effectiveForm.candidate_name.trim()) {
+      effectiveForm.candidate_name =
+        payload?.name ||
+        authForm.name ||
+        (effectiveForm.email ? effectiveForm.email.split("@")[0] : "Candidate");
+    }
+
+    if (!effectiveForm.email.trim() || !effectiveForm.candidate_name.trim()) {
       setUploadState("error");
-      setUploadError("Please fill in your personal info first.");
+      setUploadError("Please fill in your name and email in the previous step first.");
       return;
     }
+
+    setForm(effectiveForm);
 
     setSelectedFileName(file.name);
     setUploadState("uploading");
