@@ -82,29 +82,39 @@ def is_claim_relevant(claim: str, job: Job) -> bool:
 def generate_interview_questions(job: Job, parsed_resume: dict) -> list[dict]:
     """
     Generate 10 role-relevant interview questions with word count guidance.
-    Questions mix: job-based technical, claim validation, and behavioral.
+
+    Strategy:
+    - question_strategy = 'resume_based' (match >= 30/50): use resume claims for questions
+    - question_strategy = 'jd_based' (match < 30/50): use job description, ignore resume claims
     """
+    strategy = parsed_resume.get("question_strategy", "resume_based")
     skills = parsed_resume.get("extracted_skills") or parsed_resume.get("skills") or job.skills or []
     all_claims = parsed_resume.get("claims", [])
     experience_years = parsed_resume.get("experience_years", 1)
 
-    # Filter skills to job-relevant ones
-    job_combined = (job.title + " " + job.department + " " + " ".join(job.skills or [])).lower()
-    relevant_skills = [s for s in skills if any(
-        s.lower() in job_combined or
-        s.lower() in (job.description or "").lower() or
-        s in (job.skills or [])
-        for _ in [1]
-    )] or skills[:5]
+    # Always use job skills as base
+    job_skills = job.skills or []
+    job_combined = (job.title + " " + job.department + " " + " ".join(job_skills)).lower()
 
-    primary_skill = relevant_skills[0] if relevant_skills else (job.skills[0] if job.skills else "your core skill")
+    if strategy == "jd_based":
+        # Weak resume match: focus entirely on JD skills, ignore resume claims
+        relevant_skills = job_skills[:5] or skills[:5]
+        relevant_claims = []  # No claim-based questions
+    else:
+        # Strong resume match: blend resume skills with job skills
+        relevant_skills = [s for s in skills if any(
+            s.lower() in job_combined or
+            s.lower() in (job.description or "").lower() or
+            s in job_skills
+            for _ in [1]
+        )] or job_skills[:5] or skills[:5]
+        relevant_claims = [c for c in all_claims if is_claim_relevant(c, job)]
+
+    primary_skill = relevant_skills[0] if relevant_skills else (job_skills[0] if job_skills else "your core skill")
     secondary_skill = relevant_skills[1] if len(relevant_skills) > 1 else "communication"
     third_skill = relevant_skills[2] if len(relevant_skills) > 2 else "problem-solving"
 
-    # Filter claims to job-relevant ones only
-    relevant_claims = [c for c in all_claims if is_claim_relevant(c, job)]
-
-    # Build claim-based questions (max 3, only from relevant claims)
+    # Build claim-based questions (max 3, only from relevant claims, only if strategy allows)
     claim_questions = []
     for i, claim in enumerate(relevant_claims[:3]):
         claim_questions.append({

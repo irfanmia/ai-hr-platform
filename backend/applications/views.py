@@ -51,13 +51,31 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="generate-questions")
     def generate_questions(self, request, pk=None):
+        from ai_engine.resume_matcher import validate_is_resume, score_resume_match
         application = self.get_object()
         parsed_resume = parse_resume_for_application(application)
+
+        # Step 1: Validate this is actually a resume
+        validation = validate_is_resume(parsed_resume)
+        if not validation["is_resume"]:
+            return response.Response(
+                {"error": "not_a_resume", "message": validation["reason"]},
+                status=400
+            )
+
+        # Step 2: Score resume match against job requirements (0-50)
+        match_result = score_resume_match(parsed_resume, application.job)
+
+        # Step 3: Pass strategy to question generator
+        parsed_resume["question_strategy"] = match_result["question_strategy"]
+        parsed_resume["match_result"] = match_result
         questions = generate_interview_questions(application.job, parsed_resume)
+
         application.custom_answers = {
             **application.custom_answers,
             "parsed_resume": parsed_resume,
             "questions": questions,
+            "match_result": match_result,
         }
         application.save(update_fields=["custom_answers"])
         return response.Response(
@@ -65,6 +83,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 "application_id": application.id,
                 "parsed_resume": parsed_resume,
                 "questions": questions,
+                "resume_match": match_result,
             }
         )
 

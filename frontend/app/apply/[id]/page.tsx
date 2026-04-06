@@ -182,7 +182,14 @@ export default function ApplyPage({ params }: { params: any }) {
     try {
       const generated = await generateQuestions(uploadedAppId);
       setQuestions(generated.questions);
-    } catch {
+    } catch (err: any) {
+      // Check if backend rejected the document as not a resume
+      const msg = err?.response?.data?.message || "";
+      if (err?.response?.data?.error === "not_a_resume" || msg) {
+        setUploadState("error");
+        setUploadError(msg || "The uploaded file doesn't appear to be a resume. Please upload a proper CV/resume.");
+        setStep(3); // Go back to upload step
+      }
       setQuestions([]);
     } finally {
       setQuestionsLoading(false);
@@ -341,7 +348,8 @@ export default function ApplyPage({ params }: { params: any }) {
                       <UploadCloud className="mb-3 h-10 w-10 text-indigo-500" />
                       <p className="text-lg font-semibold text-slate-800">Upload your resume</p>
                       <p className="mt-1 text-sm text-slate-500">PDF, DOC, or DOCX · Max 5MB</p>
-                      <p className="mt-2 text-xs text-slate-400">Upload starts immediately on file selection</p>
+                      <p className="mt-2 text-xs font-medium text-indigo-600">💡 ATS-friendly format recommended</p>
+                      <p className="mt-0.5 text-xs text-slate-400">Clean layout, standard fonts, no graphics or tables</p>
                     </>
                   )}
                   <input

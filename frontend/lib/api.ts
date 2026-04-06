@@ -80,7 +80,15 @@ export async function submitApplication(payload: ApplicationSubmission) {
 }
 
 export async function generateQuestions(applicationId: number) {
-  const response = await api.get<GenerateQuestionsResponse>(`/applications/${applicationId}/generate-questions/`);
+  const response = await api.get<GenerateQuestionsResponse>(
+    `/applications/${applicationId}/generate-questions/`,
+    { validateStatus: (s) => s < 500 } // let 400 through so we can inspect it
+  );
+  if (response.status === 400) {
+    const err: any = new Error(response.data?.message || "Invalid document");
+    err.response = response;
+    throw err;
+  }
   return response.data;
 }
 

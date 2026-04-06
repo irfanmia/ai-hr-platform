@@ -92,13 +92,30 @@ def evaluate_answers(application: Application, questions: list[dict], answers: d
 
     avg = round(mean([s["score"] for s in scored_answers])) if scored_answers else 60
 
-    # Resume strength — generous, based on skills and experience
-    skill_count = len(parsed_resume.get("extracted_skills", parsed_resume.get("skills", [])))
-    exp_years = parsed_resume.get("experience_years", 1)
-    resume_strength = min(95, 50 + skill_count * 4 + exp_years * 3)
+    # ── 50/50 scoring split ──
+    # Interview questions are worth 50 pts total
+    # Resume match is worth 50 pts (from match_result stored in parsed_resume)
+    match_result = parsed_resume.get("match_result", {})
+    resume_match_score = match_result.get("resume_match_score", None)
 
-    # Actual performance score — the interview score, slightly smoothed up
-    actual_performance = min(95, avg + 5)
+    # Scale interview avg (0-100) down to 0-50
+    interview_score_50 = round(avg * 0.5)  # 50% weight
+
+    if resume_match_score is not None:
+        # Combined: resume match (0-50) + interview (0-50) = total (0-100)
+        combined_score = resume_match_score + interview_score_50
+        resume_strength = resume_match_score * 2  # scale back to 0-100 for display
+        actual_performance = interview_score_50 * 2  # scale back to 0-100 for display
+    else:
+        # Fallback: no match result, use old method
+        skill_count = len(parsed_resume.get("extracted_skills", parsed_resume.get("skills", [])))
+        exp_years = parsed_resume.get("experience_years", 1)
+        resume_strength = min(95, 50 + skill_count * 4 + exp_years * 3)
+        actual_performance = min(95, avg + 5)
+        combined_score = avg
+
+    # Use combined score as the overall score
+    avg = combined_score
 
     # Gap analysis
     gap = actual_performance - resume_strength
