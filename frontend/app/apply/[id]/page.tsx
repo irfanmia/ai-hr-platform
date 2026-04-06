@@ -71,6 +71,8 @@ export default function ApplyPage({ params }: { params: any }) {
   const [uploadAttempts, setUploadAttempts] = useState(0);
   const MAX_ATTEMPTS = 3;
   const [cachedQuestions, setCachedQuestions] = useState<InterviewQuestion[]>([]);
+  const [validationStep, setValidationStep] = useState<"uploading" | "validating" | "matching" | "ready" | "">("")
+  const [resumeMatchResult, setResumeMatchResult] = useState<any>(null);
 
   // Questions loading
   const [questionsLoading, setQuestionsLoading] = useState(false);
@@ -169,12 +171,18 @@ export default function ApplyPage({ params }: { params: any }) {
       setUploadedAppId(result.id);
       setApplicationId(result.id);
 
-      // Immediately validate the uploaded document with AI
-      setUploadProgress(95);
+      // Step 2: AI validates the document is a resume
+      setValidationStep("validating");
+      setUploadProgress(88);
       try {
+        // Step 3: Score resume-job match + generate questions
+        setValidationStep("matching");
+        setUploadProgress(95);
         const generated = await generateQuestions(result.id);
-        // Validation passed — cache questions so submit is instant
+        // All steps passed — cache everything
         setCachedQuestions(generated.questions || []);
+        setResumeMatchResult(generated.resume_match || null);
+        setValidationStep("ready");
         setUploadProgress(100);
         setUploadState("ready");
       } catch (validationErr: any) {
@@ -367,8 +375,17 @@ export default function ApplyPage({ params }: { params: any }) {
                   {uploadState === "ready" ? (
                     <>
                       <CheckCircle className="mb-3 h-10 w-10 text-emerald-500" />
-                      <p className="text-lg font-semibold text-emerald-700">Resume uploaded!</p>
+                      <p className="text-lg font-semibold text-emerald-700">✓ Resume verified!</p>
                       <p className="mt-1 text-sm text-emerald-600">{selectedFileName}</p>
+                      {resumeMatchResult && (
+                        <div className="mt-2 flex flex-col items-center gap-1">
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            resumeMatchResult.match_level === "Strong Match" ? "bg-emerald-100 text-emerald-700" :
+                            resumeMatchResult.match_level === "Moderate Match" ? "bg-amber-100 text-amber-700" :
+                            "bg-red-100 text-red-600"
+                          }`}>{resumeMatchResult.match_level} — {resumeMatchResult.resume_match_score}/50 pts</span>
+                        </div>
+                      )}
                       <p className="mt-2 text-xs text-slate-400">Click to replace</p>
                     </>
                   ) : uploadState === "uploading" ? (
@@ -409,10 +426,13 @@ export default function ApplyPage({ params }: { params: any }) {
                         uploadState === "error" ? "text-red-500" :
                         "text-indigo-600"
                       }>
-                        {uploadState === "uploading" ?
-                          (uploadProgress < 90 ? "Uploading resume..." : "Validating document with AI...") :
-                         uploadState === "ready" ? "✓ Verified — your resume has been accepted" :
-                         uploadState === "error" ? (uploadAttempts >= MAX_ATTEMPTS ? "Maximum attempts reached" : "Invalid document") : ""}
+                        {uploadState === "uploading" || (uploadState !== "ready" && uploadState !== "error" && validationStep) ?
+                          (validationStep === "validating" ? "Step 1 of 3: AI is checking your document..." :
+                           validationStep === "matching" ? "Step 2 of 3: Analysing resume vs job requirements..." :
+                           uploadProgress < 88 ? "Uploading resume..." :
+                           "Processing...") :
+                         uploadState === "ready" ? "✓ Document verified — ready to start interview" :
+                         uploadState === "error" ? (uploadAttempts >= MAX_ATTEMPTS ? "Maximum attempts reached" : "Document rejected") : ""}
                       </span>
                       <span className="text-slate-400">{Math.round(uploadProgress)}%</span>
                     </div>

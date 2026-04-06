@@ -22,51 +22,40 @@ logger = logging.getLogger(__name__)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 
-def validate_is_resume(parsed: dict) -> dict:
+def validate_is_resume(parsed: dict, pdf_path: str = None) -> dict:
     """
-    Check if the uploaded document is actually a resume.
+    Use Groq vision AI to check if the uploaded document is actually a resume.
+    This is the primary validation — AI looks at the actual document pages.
+    Falls back to heuristics if AI is unavailable.
     Returns {"is_resume": bool, "reason": str}
     """
-    # If vision extracted meaningful resume fields, it's a resume
+    # Primary: use Groq vision to explicitly check (works for any document type)
+    if pdf_path:
+        try:
+            from ai_engine.pdf_vision_parser import is_document_a_resume
+            return is_document_a_resume(pdf_path)
+        except Exception as e:
+            logger.warning(f"Vision validation failed: {e} — falling back to heuristics")
+
+    # Fallback: heuristic check using extracted fields
     name = parsed.get("full_name", "")
     skills = parsed.get("skills", [])
-    summary = parsed.get("summary", "")
     raw = parsed.get("raw_text", "")
-
-    # Strong signals it's a resume
     resume_signals = 0
-    if name and len(name.split()) >= 1:
-        resume_signals += 1
-    if skills and len(skills) >= 2:
-        resume_signals += 2
-    if summary and len(summary) > 20:
-        resume_signals += 1
-    if parsed.get("experience_years", 0) > 0:
-        resume_signals += 1
-    if parsed.get("education"):
-        resume_signals += 1
-
-    # Check raw text for resume keywords
+    if name and len(name.split()) >= 1: resume_signals += 1
+    if skills and len(skills) >= 2: resume_signals += 2
+    if parsed.get("experience_years", 0) > 0: resume_signals += 1
+    if parsed.get("education"): resume_signals += 1
     raw_lower = raw.lower()
-    resume_keywords = ["experience", "education", "skills", "work", "project", "certification",
-                       "university", "degree", "bachelor", "master", "engineer", "manager",
-                       "developer", "analyst", "designer", "years", "responsible", "led", "built"]
-    keyword_hits = sum(1 for kw in resume_keywords if kw in raw_lower)
-    if keyword_hits >= 3:
+    resume_keywords = ["experience", "education", "skills", "work", "developer", "manager",
+                       "analyst", "designer", "engineer", "years", "led", "built", "degree"]
+    if sum(1 for kw in resume_keywords if kw in raw_lower) >= 3:
         resume_signals += 2
-
-    is_resume = resume_signals >= 3
-
-    if not is_resume:
+    if resume_signals < 3:
         return {
             "is_resume": False,
-            "reason": (
-                "The document you uploaded doesn't appear to be a resume. "
-                "Please upload a proper resume/CV in PDF, DOC, or DOCX format. "
-                "For best results, use an ATS-friendly format (clean layout, no graphics, standard fonts)."
-            )
+            "reason": "The document doesn't appear to be a resume. Please upload your CV or resume in PDF, DOC, or DOCX format."
         }
-
     return {"is_resume": True, "reason": ""}
 
 

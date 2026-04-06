@@ -101,18 +101,17 @@ def evaluate_answers(application: Application, questions: list[dict], answers: d
     interview_weight = getattr(application.job, "interview_weight", 50)   # HR-configured
     total_weight = resume_weight + interview_weight or 100
 
+    # Always define skill_count and exp_years for use in findings
+    skill_count = len(parsed_resume.get("extracted_skills", parsed_resume.get("skills", [])))
+    exp_years = parsed_resume.get("experience_years", 1)
+
     if resume_match_score_raw is not None:
-        # Scale resume match (0-50 raw) to job's weight
         resume_component = round((resume_match_score_raw / 50) * resume_weight)
-        # Scale interview avg (0-100) to job's interview weight
         interview_component = round((avg / 100) * interview_weight)
         combined_score = resume_component + interview_component
-        resume_strength = round(resume_match_score_raw * 2)   # display as 0-100
-        actual_performance = avg  # interview score display as 0-100
+        resume_strength = round(resume_match_score_raw * 2)
+        actual_performance = avg
     else:
-        # Fallback
-        skill_count = len(parsed_resume.get("extracted_skills", parsed_resume.get("skills", [])))
-        exp_years = parsed_resume.get("experience_years", 1)
         resume_strength = min(95, 50 + skill_count * 4 + exp_years * 3)
         actual_performance = min(95, avg + 5)
         combined_score = avg

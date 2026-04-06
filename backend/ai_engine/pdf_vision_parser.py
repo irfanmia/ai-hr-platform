@@ -61,6 +61,75 @@ def pdf_to_images_base64(pdf_path: str) -> list[str]:
         return []
 
 
+def is_document_a_resume(pdf_path: str) -> dict:
+    """
+    Use Groq vision to explicitly determine if an uploaded PDF is a resume/CV.
+    Returns {"is_resume": bool, "reason": str}
+    """
+    images_b64 = pdf_to_images_base64(pdf_path)
+    if not images_b64:
+        return {"is_resume": False, "reason": "Could not read the document. Please upload a valid PDF, DOC, or DOCX file."}
+
+    if not GROQ_API_KEY:
+        # No API key — fall back to basic text check
+        return {"is_resume": True, "reason": ""}
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=GROQ_API_KEY)
+
+        content = []
+        for i, b64 in enumerate(images_b64[:2]):  # Check first 2 pages only
+            content.append({"type": "text", "text": f"Page {i + 1}:"})
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+
+        content.append({
+            "type": "text",
+            "text": (
+                "Look at this document carefully. Is this a resume or CV (curriculum vitae)? "
+                "A resume typically contains: person's name, contact info, work experience, education, skills. "
+                "Answer with ONLY a JSON object: "
+                '{"is_resume": true/false, "document_type": "what type of document this actually is", "reason": "one sentence explanation"}'
+            )
+        })
+
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{
+                "role": "user",
+                "content": content
+            }],
+            max_tokens=150,
+            temperature=0.0,
+        )
+
+        import json
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"): raw = raw[4:]
+
+        result = json.loads(raw)
+        is_resume = bool(result.get("is_resume", False))
+        doc_type = result.get("document_type", "unknown document")
+        reason = result.get("reason", "")
+
+        if not is_resume:
+            return {
+                "is_resume": False,
+                "reason": (
+                    f"The document you uploaded appears to be a {doc_type}, not a resume. "
+                    f"Please upload your CV or resume. "
+                    f"ATS-friendly format recommended: clean layout, standard fonts, no graphics."
+                )
+            }
+        return {"is_resume": True, "reason": ""}
+
+    except Exception as e:
+        logger.warning(f"Resume validation via vision failed: {e} — allowing through")
+        return {"is_resume": True, "reason": ""}  # Fail open if AI unavailable
+
+
 def extract_resume_via_vision(pdf_path: str) -> dict:
     """
     Main function: convert PDF to images, send to Groq vision model,

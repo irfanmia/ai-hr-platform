@@ -52,11 +52,20 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="generate-questions")
     def generate_questions(self, request, pk=None):
         from ai_engine.resume_matcher import validate_is_resume, score_resume_match
+        import os
         application = self.get_object()
         parsed_resume = parse_resume_for_application(application)
 
-        # Step 1: Validate this is actually a resume
-        validation = validate_is_resume(parsed_resume)
+        # Step 1: AI validates the document is actually a resume
+        # Pass the actual file path so Groq vision can inspect the document
+        pdf_path = None
+        if application.resume:
+            try:
+                pdf_path = application.resume.path
+            except Exception:
+                pass
+
+        validation = validate_is_resume(parsed_resume, pdf_path=pdf_path)
         if not validation["is_resume"]:
             return response.Response(
                 {"error": "not_a_resume", "message": validation["reason"]},
@@ -66,7 +75,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         # Step 2: Score resume match against job requirements (0-50)
         match_result = score_resume_match(parsed_resume, application.job)
 
-        # Step 3: Pass strategy to question generator
+        # Step 3: Generate interview questions based on match strategy
         parsed_resume["question_strategy"] = match_result["question_strategy"]
         parsed_resume["match_result"] = match_result
         questions = generate_interview_questions(application.job, parsed_resume)
