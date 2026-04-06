@@ -95,6 +95,21 @@ export default function ApplyPage({ params }: { params: any }) {
 
   // ── Background upload as soon as file is selected ──
   async function handleFileSelect(file: File) {
+    // Ensure candidate_name is set — fallback to email prefix or auth token name
+    const effectiveForm = { ...form };
+    if (!effectiveForm.candidate_name.trim()) {
+      const token = localStorage.getItem("candidate_access_token");
+      const payload = token ? decodeJwt(token) : null;
+      effectiveForm.candidate_name = payload?.name ||
+        (effectiveForm.email ? effectiveForm.email.split("@")[0] : "Candidate");
+      setForm(effectiveForm);
+    }
+    if (!effectiveForm.email.trim()) {
+      setUploadState("error");
+      setUploadError("Please fill in your personal info first.");
+      return;
+    }
+
     setSelectedFileName(file.name);
     setUploadState("uploading");
     setUploadProgress(0);
@@ -110,7 +125,7 @@ export default function ApplyPage({ params }: { params: any }) {
     }, 200);
 
     try {
-      const result = await submitApplication({ job: Number(id), resume: file, ...form });
+      const result = await submitApplication({ job: Number(id), resume: file, ...effectiveForm });
       clearInterval(progressInterval);
       setUploadProgress(100);
       setUploadedAppId(result.id);

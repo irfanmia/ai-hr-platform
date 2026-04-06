@@ -13,7 +13,7 @@ class Application(models.Model):
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="applications")
     candidate_name = models.CharField(max_length=255)
     email = models.EmailField()
-    phone = models.CharField(max_length=30)
+    phone = models.CharField(max_length=30, blank=True, default="")
     resume = models.FileField(upload_to="resumes/")
     portfolio_url = models.URLField(null=True, blank=True)
     github_url = models.URLField(null=True, blank=True)
