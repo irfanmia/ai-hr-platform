@@ -26,7 +26,7 @@ export default function LoginPage() {
       localStorage.setItem("hr_refresh_token", tokens.refresh);
       router.push("/dashboard");
     } catch {
-      setError("Invalid credentials. Use an HR account created in Django admin.");
+      setError("Invalid credentials. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -36,13 +36,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-6 py-12">
       <Card className="w-full max-w-md rounded-3xl">
         <CardHeader>
-          <CardTitle>HR Login</CardTitle>
+          <CardTitle>Sign In</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
               <Label className="mb-2 block">Email or Username</Label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="hr@example.com" />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@aihr.com" />
             </div>
             <div>
               <Label className="mb-2 block">Password</Label>
