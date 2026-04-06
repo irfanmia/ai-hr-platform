@@ -13,11 +13,17 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/:path*/",
+        destination: "http://64.227.150.115/api/:path*/",
+      },
+      {
         source: "/api/:path*",
-        destination: "http://64.227.150.115/api/:path*",
+        destination: "http://64.227.150.115/api/:path*/",
       },
     ];
   },
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;
