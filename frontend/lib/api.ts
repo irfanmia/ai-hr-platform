@@ -11,7 +11,7 @@ import type {
 } from "@/lib/types";
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "/api",
 });
 
 api.interceptors.request.use((config) => {

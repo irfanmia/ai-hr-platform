@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://64.227.150.115/api/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
