@@ -80,13 +80,36 @@ export default function ApplyPage({ params }: { params: any }) {
   useEffect(() => {
     getJob(id).then(setJob);
     const token = localStorage.getItem("candidate_access_token");
-    if (token) {
-      const payload = decodeJwt(token);
-      if (payload && !payload.is_staff && !payload.is_superuser) {
-        setForm((f) => ({ ...f, email: payload.email || "" }));
-        setStep(2);
-      }
-    }
+    if (!token) return;
+    const payload = decodeJwt(token);
+    if (!payload || payload.is_staff || payload.is_superuser) return;
+
+    // Pre-fill email
+    setForm((f) => ({ ...f, email: payload.email || "", candidate_name: payload.name || "" }));
+    setStep(2);
+
+    // Check if candidate already has an application for this job
+    fetch(`${API}/dashboard/my-applications/job/${id}/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.applied) return;
+        // Has existing application
+        setUploadedAppId(data.application_id);
+        setApplicationId(data.application_id);
+        if (data.has_report) {
+          // Already completed — show done
+          setStep(5);
+        } else if (data.has_resume) {
+          // Resume uploaded, jump to interview
+          setUploadState("ready");
+          setUploadProgress(100);
+          setSelectedFileName("Previously uploaded resume");
+          setStep(3);
+        }
+      })
+      .catch(() => {});
   }, [id]);
 
   const currentQuestion = questions[questionIndex];
@@ -205,11 +228,26 @@ export default function ApplyPage({ params }: { params: any }) {
 
         {/* Step indicators */}
         <div className="mb-10 flex flex-wrap gap-3">
-          {STEPS.map((label, index) => (
-            <div key={label} className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${step >= index + 1 ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500"}`}>
-              {index + 1}. {label}
-            </div>
-          ))}
+          {STEPS.map((label, index) => {
+            const stepNum = index + 1;
+            const isCompleted = step > stepNum;
+            const isCurrent = step === stepNum;
+            // Allow clicking back to completed steps (not forward)
+            const canGoBack = isCompleted && stepNum < 4; // can’t go back into interview
+            return (
+              <button
+                key={label}
+                disabled={!canGoBack && !isCurrent}
+                onClick={() => canGoBack ? setStep(stepNum) : undefined}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors
+                  ${isCurrent ? "bg-indigo-600 text-white" :
+                    isCompleted ? "bg-indigo-200 text-indigo-800 cursor-pointer hover:bg-indigo-300" :
+                    "bg-slate-100 text-slate-400 cursor-default"}`}
+              >
+                {isCompleted ? "✓" : stepNum}. {label}
+              </button>
+            );
+          })}
         </div>
 
         <Card className="rounded-3xl">
@@ -268,8 +306,9 @@ export default function ApplyPage({ params }: { params: any }) {
                     <Input value={value} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
                   </div>
                 ))}
-                <div className="md:col-span-2">
-                  <Button onClick={() => setStep(3)}>Continue to Resume</Button>
+                <div className="md:col-span-2 flex gap-3">
+                  <Button variant="outline" onClick={() => setStep(1)}>← Back</Button>
+                  <Button onClick={() => setStep(3)}>Continue to Resume →</Button>
                 </div>
               </div>
             )}

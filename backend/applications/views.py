@@ -174,3 +174,23 @@ class CandidateApplicationsView(views.APIView):
         ).select_related("job").order_by("-created_at")
         serializer = ApplicationSerializer(apps, many=True, context={"request": request})
         return response.Response(serializer.data)
+
+
+class CandidateJobApplicationStatusView(views.APIView):
+    """Check if the logged-in candidate has applied to a specific job."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, job_id: int):
+        app = Application.objects.filter(
+            email__iexact=request.user.email,
+            job_id=job_id
+        ).first()
+        if not app:
+            return response.Response({"applied": False})
+        return response.Response({
+            "applied": True,
+            "application_id": app.id,
+            "status": app.status,
+            "has_report": app.ai_report is not None,
+            "has_resume": bool(app.resume),
+        })

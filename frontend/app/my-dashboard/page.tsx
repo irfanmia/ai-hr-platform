@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
+
 import { PublicNav } from "@/components/public-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -136,18 +138,29 @@ export default function CandidateDashboard() {
             ) : (
               <div className="space-y-4">
                 {applications.map((app) => (
-                  <div key={app.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
-                    <div>
+                  <div key={app.id} className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex-1">
                       <p className="font-medium text-slate-900">{app.job?.title}</p>
                       <p className="text-sm text-slate-500">{app.job?.department} · {app.job?.location_type}</p>
                       <p className="text-xs text-slate-400 mt-1">Applied {new Date(app.created_at).toLocaleDateString()}</p>
+                      {!app.ai_report && app.job?.id && (
+                        <Link
+                          href={`/apply/${app.job.id}`}
+                          className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+                        >
+                          ▶ Continue Application
+                        </Link>
+                      )}
                     </div>
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex flex-col items-end gap-2 shrink-0">
                       <span className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${STATUS_COLORS[app.status] ?? "bg-slate-100 text-slate-600"}`}>
                         {app.status}
                       </span>
                       {app.ai_score != null && (
                         <span className="text-xs text-slate-500">AI Score: <strong>{app.ai_score}</strong>/100</span>
+                      )}
+                      {app.ai_report && (
+                        <span className="text-xs text-emerald-600 font-medium">✓ Interview complete</span>
                       )}
                     </div>
                   </div>
