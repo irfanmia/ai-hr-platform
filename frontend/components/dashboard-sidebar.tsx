@@ -20,7 +20,7 @@ export function DashboardSidebar() {
   function handleLogout() {
     localStorage.removeItem("hr_access_token");
     localStorage.removeItem("hr_refresh_token");
-    router.push("/login");
+    router.push("/admin-login");
   }
 
   return (

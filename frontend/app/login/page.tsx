@@ -34,7 +34,7 @@ function LoginSignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // "login-hr" | "login-candidate" | "signup"
+  // "login-candidate" | "signup"
   const [mode, setMode] = useState<"login-hr" | "login-candidate" | "signup">("login-candidate");
 
   const [name, setName] = useState("");
@@ -106,13 +106,13 @@ function LoginSignupForm() {
       <div className="flex min-h-[calc(100vh-65px)] items-center justify-center px-6 py-12">
         <div className="w-full max-w-md space-y-4">
 
-          {/* Tab switcher */}
+          {/* Tab switcher — candidates only */}
           <div className="flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
             <button
               onClick={() => { setMode("login-candidate"); setError(""); }}
               className={`flex-1 rounded-xl py-2 text-sm font-medium transition-colors ${mode === "login-candidate" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:text-slate-900"}`}
             >
-              Candidate Login
+              Sign In
             </button>
             <button
               onClick={() => { setMode("signup"); setError(""); }}
@@ -120,25 +120,15 @@ function LoginSignupForm() {
             >
               Sign Up
             </button>
-            <button
-              onClick={() => { setMode("login-hr"); setError(""); }}
-              className={`flex-1 rounded-xl py-2 text-sm font-medium transition-colors ${mode === "login-hr" ? "bg-slate-800 text-white shadow" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              HR Admin
-            </button>
           </div>
 
           <Card className="rounded-3xl shadow-sm">
             <CardHeader>
               <CardTitle>
-                {mode === "signup" ? "Create your account" :
-                 mode === "login-candidate" ? "Welcome back" :
-                 "HR Admin Login"}
+                {mode === "signup" ? "Create your account" : "Welcome back"}
               </CardTitle>
               <p className="text-sm text-slate-500">
-                {mode === "signup" ? "Sign up to apply for jobs and track your applications." :
-                 mode === "login-candidate" ? "Sign in to view your applications and profile." :
-                 "Restricted to authorised HR staff only."}
+                {mode === "signup" ? "Sign up to apply for jobs and track your applications." : "Sign in to view your applications and profile."}
               </p>
             </CardHeader>
             <CardContent>
@@ -168,11 +158,8 @@ function LoginSignupForm() {
                   <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
                 )}
 
-                <Button className={`w-full ${mode === "login-hr" ? "bg-slate-800 hover:bg-slate-700" : ""}`} type="submit" disabled={loading}>
-                  {loading ? "Please wait..." :
-                   mode === "signup" ? "Create Account" :
-                   mode === "login-candidate" ? "Sign In" :
-                   "HR Admin Login"}
+                <Button className="w-full" type="submit" disabled={loading}>
+                  {loading ? "Please wait..." : mode === "signup" ? "Create Account" : "Sign In"}
                 </Button>
               </form>
 
@@ -188,22 +175,21 @@ function LoginSignupForm() {
                     <button className="font-medium text-indigo-600 hover:underline" onClick={() => { setMode("login-candidate"); setError(""); }}>Sign in</button>
                   </>
                 )}
-                {mode === "login-hr" && (
-                  <>Looking to apply?{" "}
-                    <Link href="/jobs" className="font-medium text-indigo-600 hover:underline">Browse jobs →</Link>
-                  </>
-                )}
+
               </div>
             </CardContent>
           </Card>
 
-          {/* Browse jobs CTA for candidates */}
-          {mode !== "login-hr" && (
-            <p className="text-center text-sm text-slate-500">
-              Looking for a job?{" "}
-              <Link href="/jobs" className="font-medium text-indigo-600 hover:underline">Browse open roles →</Link>
-            </p>
-          )}
+          {/* Browse jobs CTA */}
+          <p className="text-center text-sm text-slate-500">
+            Looking for a job?{" "}
+            <Link href="/jobs" className="font-medium text-indigo-600 hover:underline">Browse open roles →</Link>
+          </p>
+
+          {/* Discrete HR admin link */}
+          <p className="text-center text-xs text-slate-300 hover:text-slate-400 transition-colors">
+            <Link href="/admin-login">Admin access</Link>
+          </p>
         </div>
       </div>
     </div>
