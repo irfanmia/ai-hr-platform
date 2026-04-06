@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -69,8 +69,47 @@ def candidate_register(request):
     user = User.objects.create_user(username=username, email=email, password=password, first_name=name.split()[0], last_name=" ".join(name.split()[1:]))
 
     refresh = RefreshToken.for_user(user)
+    access = refresh.access_token
+    # Embed is_staff in token
+    access["is_staff"] = user.is_staff
+    access["is_superuser"] = user.is_superuser
+    access["email"] = email
     return Response({
-        "access": str(refresh.access_token),
+        "access": str(access),
         "refresh": str(refresh),
         "user": {"name": name, "email": email},
     }, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def candidate_profile(request):
+    """Return current user profile info."""
+    user = request.user
+    return Response({
+        "id": user.id,
+        "name": f"{user.first_name} {user.last_name}".strip() or user.username,
+        "email": user.email,
+        "username": user.username,
+        "is_staff": user.is_staff,
+    })
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    """Update current user name and/or password."""
+    user = request.user
+    name = request.data.get("name", "").strip()
+    password = request.data.get("password", "").strip()
+
+    if name:
+        parts = name.split()
+        user.first_name = parts[0]
+        user.last_name = " ".join(parts[1:])
+    if password:
+        if len(password) < 6:
+            return Response({"error": "Password must be at least 6 characters."}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(password)
+    user.save()
+    return Response({"success": True, "name": f"{user.first_name} {user.last_name}".strip()})

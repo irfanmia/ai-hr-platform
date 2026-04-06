@@ -162,3 +162,15 @@ class ApplicationDetailView(views.APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return response.Response(ApplicationSerializer(application, context={"request": request}).data)
+
+
+class CandidateApplicationsView(views.APIView):
+    """Return applications belonging to the logged-in candidate by email."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        apps = Application.objects.filter(
+            email__iexact=request.user.email
+        ).select_related("job").order_by("-created_at")
+        serializer = ApplicationSerializer(apps, many=True, context={"request": request})
+        return response.Response(serializer.data)

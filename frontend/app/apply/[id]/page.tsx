@@ -344,7 +344,10 @@ export default function ApplyPage({ params }: { params: any }) {
                 <h3 className="text-3xl font-semibold text-slate-950">Application submitted!</h3>
                 <p className="mt-3 text-slate-500">Your application has been recorded and the AI report is ready for HR review.</p>
                 <p className="mt-2 text-sm font-medium text-slate-700">Application ID: {applicationId}</p>
-                <Link href="/jobs" className="mt-6 text-sm text-indigo-600 hover:underline">Browse more jobs →</Link>
+                <div className="mt-6 flex gap-4">
+                <Link href="/my-dashboard" className="text-sm text-indigo-600 hover:underline">View My Dashboard →</Link>
+                <Link href="/jobs" className="text-sm text-slate-500 hover:underline">Browse more jobs</Link>
+              </div>
               </div>
             )}
 
