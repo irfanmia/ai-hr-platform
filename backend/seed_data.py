@@ -54,6 +54,7 @@ JOB_SEEDS = [
             "Mentor junior engineers and support their growth through pair programming and feedback."
         ),
         "custom_fields": {"employment_type": "Full-time", "interview_rounds": 4, "notice_period": "30 days"},
+        "response_type": "video_preferred",
     },
     {
         "title": "Product Manager",
@@ -98,6 +99,7 @@ JOB_SEEDS = [
             "Stay ahead of market trends in AI, HR technology, and talent acquisition."
         ),
         "custom_fields": {"employment_type": "Full-time", "interview_rounds": 4, "notice_period": "30 days"},
+        "response_type": "candidate_choice",
     },
     {
         "title": "Data Analyst",
@@ -142,6 +144,7 @@ JOB_SEEDS = [
             "Ensure data quality and consistency across all reporting surfaces."
         ),
         "custom_fields": {"employment_type": "Full-time", "interview_rounds": 3, "notice_period": "30 days"},
+        "response_type": "text",
     },
     {
         "title": "DevOps Engineer",
@@ -186,6 +189,7 @@ JOB_SEEDS = [
             "Document all infrastructure, runbooks, and operational procedures clearly."
         ),
         "custom_fields": {"employment_type": "Full-time", "interview_rounds": 4, "notice_period": "30 days", "on_call": "Yes"},
+        "response_type": "video",
     },
     {
         "title": "UI/UX Designer",
@@ -230,6 +234,7 @@ JOB_SEEDS = [
             "Contribute to product strategy by bringing user insights and design thinking to planning."
         ),
         "custom_fields": {"employment_type": "Full-time", "portfolio_required": True, "interview_rounds": 3, "notice_period": "30 days"},
+        "response_type": "video_preferred",
     },
     {
         "title": "Chief Executive Officer (CEO)",
@@ -281,6 +286,7 @@ JOB_SEEDS = [
             "interview_rounds": 5,
             "reports_to": "Board of Directors"
         },
+        "response_type": "video",
     },
 ]
 
