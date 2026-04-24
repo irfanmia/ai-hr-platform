@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
     remotePatterns: [],
   },
   typescript: {
-    ignoreBuildErrors: true,
+    // Enforce type-checking during Vercel builds. We fixed all surfacing
+    // errors in the M1.1 + M1.2 commits, so future regressions will fail
+    // the deploy instead of sneaking through.
+    ignoreBuildErrors: false,
   },
   // `eslint` is valid per Next.js docs but missing from the installed
   // NextConfig typedef — ts-expect-error keeps `tsc --noEmit` clean.
