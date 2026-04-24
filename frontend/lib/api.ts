@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
   Application,
@@ -9,20 +9,106 @@ import type {
   Job,
   LoginResponse,
 } from "@/lib/types";
+import {
+  clearCandidate,
+  clearHr,
+  getAuthState,
+  updateCandidateAccess,
+  updateHrAccess,
+} from "@/lib/auth-store";
 
-const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "/api",
-});
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
+const api = axios.create({ baseURL: BASE_URL });
+
+/** Request interceptor — attach whichever access token we have.
+ *
+ * Preference order:
+ *  1. HR access token   — a logged-in HR user is doing the request
+ *  2. Candidate access  — a logged-in candidate; the backend accepts either
+ *
+ * Routes that are candidate-only or HR-only are enforced server-side; the
+ * client just attaches what it has. */
 api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("hr_access_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (typeof window === "undefined") return config;
+  const { hrAccess, candidateAccess } = getAuthState();
+  const token = hrAccess || candidateAccess;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+/** Response interceptor — on 401 try one silent refresh and retry.
+ *
+ * Concurrency: a burst of 10 parallel requests hitting a just-expired token
+ * would all 401. We do a single refresh per burst via `refreshPromise`.
+ *
+ * Which refresh token? We look at the request's Authorization header to
+ * decide whether HR or candidate refresh should run. Fallback: HR first,
+ * then candidate. */
+let refreshPromise: Promise<string | null> | null = null;
+
+async function tryRefresh(kind: "hr" | "candidate"): Promise<string | null> {
+  const { hrRefresh, candidateRefresh } = getAuthState();
+  const refresh = kind === "hr" ? hrRefresh : candidateRefresh;
+  if (!refresh) return null;
+  try {
+    // Use a bare axios call so we don't recurse through our own interceptors
+    const res = await axios.post<{ access: string }>(
+      `${BASE_URL}/auth/refresh/`,
+      { refresh },
+      { headers: { "Content-Type": "application/json" } },
+    );
+    const access = res.data.access;
+    if (!access) return null;
+    if (kind === "hr") updateHrAccess(access);
+    else updateCandidateAccess(access);
+    return access;
+  } catch {
+    return null;
+  }
+}
+
+api.interceptors.response.use(
+  (res) => res,
+  async (error: AxiosError) => {
+    const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
+    const status = error.response?.status;
+    if (status !== 401 || !original || original._retried) {
+      return Promise.reject(error);
+    }
+    // Don't try to refresh the refresh endpoint itself
+    if (original.url?.includes("/auth/refresh/") || original.url?.includes("/auth/login/")) {
+      return Promise.reject(error);
+    }
+    original._retried = true;
+
+    // Figure out which role made the call by inspecting the token we sent
+    const sentAuth = String(original.headers?.Authorization ?? "");
+    const { hrAccess } = getAuthState();
+    const isHrRequest = hrAccess && sentAuth.includes(hrAccess);
+    const kind: "hr" | "candidate" = isHrRequest ? "hr" : "candidate";
+
+    if (!refreshPromise) {
+      refreshPromise = tryRefresh(kind).finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const newAccess = await refreshPromise;
+
+    if (!newAccess) {
+      // Refresh failed — the user's session is truly gone. Clear and surface.
+      if (kind === "hr") clearHr("hr_session_expired");
+      else clearCandidate("candidate_session_expired");
+      return Promise.reject(error);
+    }
+    // Retry the original request with the fresh token
+    original.headers = original.headers ?? {};
+    (original.headers as Record<string, string>).Authorization = `Bearer ${newAccess}`;
+    return api(original);
+  },
+);
 
 export async function getJobs(params?: Record<string, string | string[] | undefined>) {
   // Build URLSearchParams manually so arrays serialize as repeated keys

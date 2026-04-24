@@ -9,11 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/api";
-
-function decodeJwt(token: string) {
-  try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
-  catch { return null; }
-}
+import { decodeJwt, setHrTokens } from "@/lib/auth-store";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -32,8 +28,7 @@ export default function AdminLoginPage() {
         setError("Access denied. This portal is for HR administrators only.");
         return;
       }
-      localStorage.setItem("hr_access_token", tokens.access);
-      localStorage.setItem("hr_refresh_token", tokens.refresh);
+      setHrTokens(tokens.access, tokens.refresh);
       router.push("/dashboard");
     } catch {
       setError("Invalid credentials. Please try again.");

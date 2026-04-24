@@ -4,40 +4,35 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { clearHr } from "@/lib/auth-store";
+import { useAuth } from "@/lib/use-auth";
 
-function decodeJwt(token: string): Record<string, any> | null {
-  try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
-    return decoded;
-  } catch {
-    return null;
-  }
-}
-
+/**
+ * Gate for the HR dashboard. Ensures the visitor has a valid HR token
+ * (JWT carries `is_staff=true`). If not, redirects to /login with a reason.
+ *
+ * Note: this only checks the token's claims, not its signature. The server
+ * rejects tampered/expired tokens on every request, and the 401 interceptor
+ * logs the user out on second-auth-failure.
+ */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const { state, hr } = useAuth();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("hr_access_token");
-    if (!token) {
+    if (!state.hrAccess) {
       router.replace("/login");
       return;
     }
-
-    // Decode JWT and check is_staff
-    const payload = decodeJwt(token);
-    if (!payload || (!payload.is_staff && !payload.is_superuser)) {
-      // Candidate account — redirect to jobs with message
-      localStorage.removeItem("hr_access_token");
-      localStorage.removeItem("hr_refresh_token");
+    if (!hr || (!hr.is_staff && !hr.is_superuser)) {
+      // Candidate token sneaked in somehow — scrub and redirect
+      clearHr("hr_logged_out");
       router.replace("/login?error=not_staff");
       return;
     }
-
     setReady(true);
-  }, [router]);
+  }, [router, state.hrAccess, hr]);
 
   if (!ready) {
     return (

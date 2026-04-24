@@ -18,15 +18,11 @@ import {
   useInterviewCamera,
 } from "@/components/video-interview";
 import { generateQuestions, getJob, submitAnswers, submitApplication } from "@/lib/api";
+import { decodeJwt, getAuthState, setCandidateTokens } from "@/lib/auth-store";
 import type { AnswerMode, InterviewQuestion, Job, ResponseType } from "@/lib/types";
 
 const STEPS = ["Sign In", "Personal Info", "Resume Upload", "AI Interview", "Done"];
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
-
-function decodeJwt(token: string) {
-  try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
-  catch { return null; }
-}
 
 async function registerCandidate(name: string, email: string, password: string) {
   const res = await fetch(`${API}/auth/register/`, {
@@ -97,7 +93,7 @@ export default function ApplyPage({ params }: { params: any }) {
 
   useEffect(() => {
     getJob(id).then(setJob);
-    const token = localStorage.getItem("candidate_access_token");
+    const { candidateAccess: token } = getAuthState();
     if (!token) return;
     const payload = decodeJwt(token);
     if (!payload || payload.is_staff || payload.is_superuser) return;
@@ -142,7 +138,7 @@ export default function ApplyPage({ params }: { params: any }) {
     const effectiveForm = { ...form };
 
     // Get name + email from JWT token if not already set
-    const token = localStorage.getItem("candidate_access_token");
+    const { candidateAccess: token } = getAuthState();
     const payload = token ? decodeJwt(token) : null;
 
     if (!effectiveForm.email.trim()) {
@@ -277,13 +273,13 @@ export default function ApplyPage({ params }: { params: any }) {
     try {
       if (isSignIn) {
         const data = await loginCandidate(authForm.email, authForm.password);
-        localStorage.setItem("candidate_access_token", data.access);
+        setCandidateTokens(data.access, data.refresh);
         setForm((f) => ({ ...f, email: authForm.email, candidate_name: authForm.email.split("@")[0] }));
       } else {
         if (authForm.password !== authForm.confirmPassword) { setAuthError("Passwords do not match."); return; }
         if (authForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
         const data = await registerCandidate(authForm.name, authForm.email, authForm.password);
-        localStorage.setItem("candidate_access_token", data.access);
+        setCandidateTokens(data.access, data.refresh);
         setForm((f) => ({ ...f, email: authForm.email, candidate_name: authForm.name }));
       }
       setStep(2);

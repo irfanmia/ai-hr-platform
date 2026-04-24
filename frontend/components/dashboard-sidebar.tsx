@@ -6,6 +6,7 @@ import { Briefcase, ClipboardList, LayoutDashboard, LogOut, Menu, X } from "luci
 import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
+import { clearHr } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -30,8 +31,7 @@ export function DashboardSidebar() {
   }, []);
 
   function handleLogout() {
-    localStorage.removeItem("hr_access_token");
-    localStorage.removeItem("hr_refresh_token");
+    clearHr();
     router.push("/admin-login");
   }
 

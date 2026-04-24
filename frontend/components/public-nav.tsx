@@ -1,32 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-
-function decodeJwt(token: string) {
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-  } catch { return null; }
-}
+import { clearCandidate } from "@/lib/auth-store";
+import { useAuth } from "@/lib/use-auth";
 
 export function PublicNav() {
-  const [candidateName, setCandidateName] = useState<string | null>(null);
-
-  useEffect(() => {
-    const token = localStorage.getItem("candidate_access_token");
-    if (token) {
-      const payload = decodeJwt(token);
-      if (payload && !payload.is_staff && !payload.is_superuser) {
-        setCandidateName(payload.email?.split("@")[0] || "Me");
-      }
-    }
-  }, []);
+  const { isCandidateLoggedIn, candidate } = useAuth();
+  const candidateName = isCandidateLoggedIn
+    ? candidate?.name || candidate?.email?.split("@")[0] || "Me"
+    : null;
 
   function handleLogout() {
-    localStorage.removeItem("candidate_access_token");
-    setCandidateName(null);
+    clearCandidate();
     window.location.href = "/jobs";
   }
 

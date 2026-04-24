@@ -10,14 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/api";
+import { decodeJwt, getAuthState, setCandidateTokens, setHrTokens } from "@/lib/auth-store";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
-
-function decodeJwt(token: string): Record<string, any> | null {
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-  } catch { return null; }
-}
 
 async function registerCandidate(name: string, email: string, password: string) {
   const res = await fetch(`${API}/auth/register/`, {
@@ -50,9 +45,9 @@ function LoginSignupForm() {
       setMode("login-candidate");
     }
     // If already signed in as candidate → go to my-dashboard
-    const token = localStorage.getItem("candidate_access_token");
-    if (token) {
-      const p = decodeJwt(token);
+    const { candidateAccess } = getAuthState();
+    if (candidateAccess) {
+      const p = decodeJwt(candidateAccess);
       if (p && !p.is_staff) router.replace("/my-dashboard");
     }
   }, [searchParams, router]);
@@ -67,7 +62,7 @@ function LoginSignupForm() {
         if (password !== confirmPassword) { setError("Passwords do not match."); return; }
         if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
         const data = await registerCandidate(name, email, password);
-        localStorage.setItem("candidate_access_token", data.access);
+        setCandidateTokens(data.access, data.refresh);
         router.push("/my-dashboard");
 
       } else if (mode === "login-candidate") {
@@ -75,10 +70,10 @@ function LoginSignupForm() {
         const payload = decodeJwt(tokens.access);
         if (payload?.is_staff || payload?.is_superuser) {
           // Oops — HR user logged into candidate form
-          localStorage.setItem("hr_access_token", tokens.access);
+          setHrTokens(tokens.access, tokens.refresh);
           router.push("/dashboard");
         } else {
-          localStorage.setItem("candidate_access_token", tokens.access);
+          setCandidateTokens(tokens.access, tokens.refresh);
           router.push("/my-dashboard");
         }
 
@@ -90,7 +85,7 @@ function LoginSignupForm() {
           setError("This is for HR administrators only. Use 'Candidate Login' below.");
           return;
         }
-        localStorage.setItem("hr_access_token", tokens.access);
+        setHrTokens(tokens.access, tokens.refresh);
         router.push("/dashboard");
       }
     } catch (err: any) {

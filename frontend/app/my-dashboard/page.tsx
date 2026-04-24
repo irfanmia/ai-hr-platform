@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { clearCandidate, getAuthState } from "@/lib/auth-store";
+import { useAuth } from "@/lib/use-auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -22,14 +24,9 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-function decodeJwt(token: string) {
-  try {
-    return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-  } catch { return null; }
-}
-
 export default function CandidateDashboard() {
   const router = useRouter();
+  const { state, candidate, isCandidateLoggedIn } = useAuth();
   const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [applications, setApplications] = useState<any[]>([]);
@@ -42,10 +39,9 @@ export default function CandidateDashboard() {
   const [saveErr, setSaveErr] = useState("");
 
   useEffect(() => {
-    const t = localStorage.getItem("candidate_access_token");
+    const t = state.candidateAccess;
     if (!t) { router.replace("/login"); return; }
-    const payload = decodeJwt(t);
-    if (payload?.is_staff || payload?.is_superuser) {
+    if (candidate?.is_staff || candidate?.is_superuser) {
       router.replace("/dashboard"); return;
     }
     setToken(t);
@@ -61,7 +57,10 @@ export default function CandidateDashboard() {
       setApplications(Array.isArray(apps) ? apps : []);
       setLoading(false);
     });
-  }, [router]);
+    // We intentionally don't include `candidate` — its identity changes
+    // every render but its .is_staff claim is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, state.candidateAccess]);
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -94,7 +93,7 @@ export default function CandidateDashboard() {
   }
 
   function handleLogout() {
-    localStorage.removeItem("candidate_access_token");
+    clearCandidate();
     router.push("/jobs");
   }
 

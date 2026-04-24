@@ -7,13 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Job } from "@/lib/types";
+import { useAuth } from "@/lib/use-auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
-
-function decodeJwt(token: string) {
-  try { return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
-  catch { return null; }
-}
 
 type AppStatus = {
   applied: boolean;
@@ -25,20 +21,17 @@ type AppStatus = {
 
 export function JobCard({ job }: { job: Job }) {
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
+  const { state, isCandidateLoggedIn } = useAuth();
 
   useEffect(() => {
-    const token = localStorage.getItem("candidate_access_token");
-    if (!token) return;
-    const payload = decodeJwt(token);
-    if (!payload || payload.is_staff || payload.is_superuser) return;
-
+    if (!isCandidateLoggedIn || !state.candidateAccess) return;
     fetch(`${API}/dashboard/my-applications/job/${job.id}/`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${state.candidateAccess}` },
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setAppStatus(data); })
       .catch(() => {});
-  }, [job.id]);
+  }, [job.id, isCandidateLoggedIn, state.candidateAccess]);
 
   const isCompleted = appStatus?.applied && appStatus?.has_report;
   const isInProgress = appStatus?.applied && !appStatus?.has_report;
