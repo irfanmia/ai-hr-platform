@@ -5,31 +5,28 @@ import { useEffect, useState } from "react";
 
 import Link from "next/link";
 
+import { Briefcase, Bookmark, ClipboardList, FileCheck2 } from "lucide-react";
+
+import { ApplicationCard, type ApplicationLite } from "@/components/application-card";
 import { PublicNav } from "@/components/public-nav";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { clearCandidate, getAuthState } from "@/lib/auth-store";
+import { clearCandidate } from "@/lib/auth-store";
+import { useSavedJobs } from "@/lib/saved-jobs";
 import { useAuth } from "@/lib/use-auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
-const STATUS_COLORS: Record<string, string> = {
-  new: "bg-blue-100 text-blue-700",
-  screening: "bg-yellow-100 text-yellow-700",
-  shortlisted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-};
-
 export default function CandidateDashboard() {
   const router = useRouter();
-  const { state, candidate, isCandidateLoggedIn } = useAuth();
+  const { state, candidate } = useAuth();
+  const { count: savedCount } = useSavedJobs();
   const [token, setToken] = useState<string | null>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [applications, setApplications] = useState<any[]>([]);
+  const [profile, setProfile] = useState<{ name?: string; email?: string } | null>(null);
+  const [applications, setApplications] = useState<ApplicationLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [editName, setEditName] = useState("");
   const [editPassword, setEditPassword] = useState("");
@@ -52,9 +49,10 @@ export default function CandidateDashboard() {
       fetch(`${API}/auth/profile/`, { headers }).then(r => r.json()),
       fetch(`${API}/dashboard/my-applications/`, { headers }).then(r => r.json()),
     ]).then(([prof, apps]) => {
-      setProfile(prof);
-      setEditName(prof.name || "");
-      setApplications(Array.isArray(apps) ? apps : []);
+      const p = prof as { name?: string; email?: string };
+      setProfile(p);
+      setEditName(p.name || "");
+      setApplications(Array.isArray(apps) ? (apps as ApplicationLite[]) : []);
       setLoading(false);
     });
     // We intentionally don't include `candidate` — its identity changes
@@ -84,7 +82,7 @@ export default function CandidateDashboard() {
     const data = await res.json();
     if (res.ok) {
       setSaveMsg("Profile updated successfully!");
-      setProfile((p: any) => ({ ...p, name: data.name }));
+      setProfile((p) => ({ ...(p ?? {}), name: data.name }));
       setEditPassword(""); setEditConfirm("");
     } else {
       setSaveErr(data.error || "Failed to save.");
@@ -109,65 +107,131 @@ export default function CandidateDashboard() {
     );
   }
 
+  // ── Derived stats for the top strip ──
+  const totalApps = applications.length;
+  const inProgress = applications.filter((a) => !a.ai_report).length;
+  const decisions = applications.filter(
+    (a) => a.status === "shortlisted" || a.status === "rejected"
+  ).length;
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PublicNav />
-      <main className="mx-auto max-w-4xl px-6 py-12 space-y-8">
+      <main className="mx-auto max-w-5xl px-6 py-10 space-y-8">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* ── Hero header ── */}
+        <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">My Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Welcome back, {profile?.name}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-500">
+              My Dashboard
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-950">
+              Welcome back{profile?.name ? `, ${profile.name}` : ""}
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Track your applications, view AI interview results, manage your profile.
+            </p>
           </div>
           <Button variant="outline" onClick={handleLogout}>Sign Out</Button>
         </div>
 
-        {/* My Applications */}
-        <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>My Applications ({applications.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {applications.length === 0 ? (
-              <div className="text-center py-10">
-                <p className="text-slate-500 mb-4">You haven't applied to any jobs yet.</p>
-                <Button onClick={() => router.push("/jobs")}>Browse Jobs</Button>
+        {/* ── Stats strip ── */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-indigo-100 text-indigo-600">
+                <ClipboardList className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs text-slate-500">Applications</p>
+                <p className="text-xl font-semibold text-slate-900">{totalApps}</p>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {applications.map((app) => (
-                  <div key={app.id} className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{app.job?.title}</p>
-                      <p className="text-sm text-slate-500">{app.job?.department} · {app.job?.location_type}</p>
-                      <p className="text-xs text-slate-400 mt-1">Applied {new Date(app.created_at).toLocaleDateString()}</p>
-                      {!app.ai_report && app.job?.id && (
-                        <Link
-                          href={`/apply/${app.job.id}`}
-                          className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
-                        >
-                          ▶ Continue Application
-                        </Link>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <span className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${STATUS_COLORS[app.status] ?? "bg-slate-100 text-slate-600"}`}>
-                        {app.status}
-                      </span>
-                      {app.ai_score != null && (
-                        <span className="text-xs text-slate-500">AI Score: <strong>{app.ai_score}</strong>/100</span>
-                      )}
-                      {app.ai_report && (
-                        <span className="text-xs text-emerald-600 font-medium">✓ Interview complete</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-amber-600">
+                <Briefcase className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs text-slate-500">In progress</p>
+                <p className="text-xl font-semibold text-slate-900">{inProgress}</p>
               </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+                <FileCheck2 className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs text-slate-500">Decisions</p>
+                <p className="text-xl font-semibold text-slate-900">{decisions}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Saved jobs callout (only when user has some) ── */}
+        {savedCount > 0 && (
+          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-indigo-50 text-indigo-600">
+                <Bookmark className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  You have {savedCount} saved job{savedCount !== 1 ? "s" : ""}
+                </p>
+                <p className="text-xs text-slate-500">Go back and apply when you&apos;re ready.</p>
+              </div>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/saved">View saved →</Link>
+            </Button>
+          </div>
+        )}
+
+        {/* ── Applications ── */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-950">My applications</h2>
+            {totalApps > 0 && (
+              <Link href="/jobs" className="text-sm font-medium text-indigo-600 hover:underline">
+                + Apply to another role
+              </Link>
             )}
-          </CardContent>
-        </Card>
+          </div>
+
+          {totalApps === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+              <div className="mb-5 grid h-16 w-16 place-items-center rounded-full bg-indigo-50 text-indigo-500">
+                <Briefcase className="h-7 w-7" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">No applications yet</h3>
+              <p className="mt-2 max-w-sm text-sm text-slate-500">
+                Start by browsing open roles. The AI interview takes about 10 minutes and
+                generates a report HR reviews automatically.
+              </p>
+              <div className="mt-6 flex gap-3">
+                <Button asChild>
+                  <Link href="/jobs">Browse open roles</Link>
+                </Button>
+                {savedCount > 0 && (
+                  <Button asChild variant="outline">
+                    <Link href="/saved">View saved jobs</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {applications.map((app) => (
+                <ApplicationCard key={app.id} app={app} />
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Edit Profile */}
         <Card className="rounded-3xl">

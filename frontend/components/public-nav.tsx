@@ -1,13 +1,16 @@
 "use client";
 
+import { Bookmark } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { clearCandidate } from "@/lib/auth-store";
+import { useSavedJobs } from "@/lib/saved-jobs";
 import { useAuth } from "@/lib/use-auth";
 
 export function PublicNav() {
   const { isCandidateLoggedIn, candidate } = useAuth();
+  const { count: savedCount } = useSavedJobs();
   const candidateName = isCandidateLoggedIn
     ? candidate?.name || candidate?.email?.split("@")[0] || "Me"
     : null;
@@ -27,6 +30,16 @@ export function PublicNav() {
           <Link href="/jobs" className="text-sm font-medium text-slate-600 transition hover:text-slate-950">
             Jobs
           </Link>
+          {savedCount > 0 && (
+            <Link
+              href="/saved"
+              className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-indigo-100 hover:text-indigo-700"
+              aria-label={`Saved jobs (${savedCount})`}
+            >
+              <Bookmark className="h-3.5 w-3.5" />
+              Saved <span className="font-semibold">{savedCount}</span>
+            </Link>
+          )}
           {candidateName ? (
             <>
               <Link href="/my-dashboard" className="text-sm font-medium text-indigo-600 hover:underline">

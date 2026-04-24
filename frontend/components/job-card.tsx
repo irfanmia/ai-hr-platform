@@ -1,11 +1,13 @@
 "use client";
 
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useSavedJobs } from "@/lib/saved-jobs";
 import type { Job } from "@/lib/types";
 import { useAuth } from "@/lib/use-auth";
 
@@ -22,6 +24,8 @@ type AppStatus = {
 export function JobCard({ job }: { job: Job }) {
   const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
   const { state, isCandidateLoggedIn } = useAuth();
+  const { isSaved, toggle } = useSavedJobs();
+  const saved = isSaved(job.id);
 
   useEffect(() => {
     if (!isCandidateLoggedIn || !state.candidateAccess) return;
@@ -46,7 +50,23 @@ export function JobCard({ job }: { job: Job }) {
               <p className="text-sm text-slate-500">{job.department}</p>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <Badge>{job.location_type}</Badge>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => toggle(job.id)}
+                  aria-pressed={saved}
+                  aria-label={saved ? "Remove from saved jobs" : "Save job"}
+                  title={saved ? "Remove from saved jobs" : "Save job"}
+                  className={`rounded-full p-1.5 transition-colors ${
+                    saved
+                      ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                      : "text-slate-400 hover:bg-slate-100 hover:text-indigo-500"
+                  }`}
+                >
+                  {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                </button>
+                <Badge>{job.location_type}</Badge>
+              </div>
               {isCompleted && (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">✓ Applied</span>
               )}
