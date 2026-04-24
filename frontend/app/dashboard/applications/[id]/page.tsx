@@ -3,13 +3,14 @@
 import { CheckCircle2, Download, FileText, Printer } from "lucide-react";
 import { use, useEffect, useRef, useState } from "react";
 
+import { ClaimValidationList } from "@/components/claim-validation-list";
 import { ScoreGauge } from "@/components/score-gauge";
+import { SkillRadar } from "@/components/skill-radar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getDashboardApplication, updateApplicationStatus } from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/lib/types";
 
@@ -65,15 +66,41 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
 
   return (
     <>
-      {/* Print styles */}
+      {/* Print styles — produce a clean A4 PDF */}
       <style>{`
         @media print {
+          /* Hide the whole UI shell and only show the report */
           body * { visibility: hidden; }
           #printable-report, #printable-report * { visibility: visible; }
           #printable-report { position: absolute; left: 0; top: 0; width: 100%; }
+
+          /* No interactive chrome in the print output */
           .no-print { display: none !important; }
-          .print-break { page-break-before: always; }
-          @page { margin: 20mm; }
+
+          /* Every card stays together on its own page when possible */
+          #printable-report [data-print-block] {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          /* Card borders print faintly instead of at screen weight */
+          #printable-report .rounded-3xl {
+            border-color: #cbd5e1 !important;
+            box-shadow: none !important;
+          }
+
+          /* Strip coloured backgrounds that don't print well */
+          #printable-report .bg-emerald-50\\/30,
+          #printable-report .bg-red-50\\/30 {
+            background: transparent !important;
+          }
+
+          /* Collapse empty space at the bottom of each card */
+          #printable-report .space-y-6 > * + * { margin-top: 12mm !important; }
+
+          /* A4 margins */
+          @page { margin: 18mm; }
+          @page:first { margin-top: 12mm; }
         }
       `}</style>
 
@@ -205,7 +232,10 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
               </div>
 
               {/* Gap Analysis */}
-              <Card className={`rounded-3xl border-2 ${report.gap_analysis?.type === "positive" ? "border-emerald-300 bg-emerald-50/30" : "border-red-300 bg-red-50/30"}`}>
+              <Card
+                data-print-block
+                className={`rounded-3xl border-2 ${report.gap_analysis?.type === "positive" ? "border-emerald-300 bg-emerald-50/30" : "border-red-300 bg-red-50/30"}`}
+              >
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     Gap Analysis
@@ -219,56 +249,83 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
                 </CardContent>
               </Card>
 
-              {/* Skill heatmap */}
-              <Card className="rounded-3xl">
+              {/* Skill breakdown: radar chart + bars fallback for < 3 skills */}
+              <Card className="rounded-3xl" data-print-block>
                 <CardHeader><CardTitle>Skill Breakdown</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  {Object.entries(report.skill_breakdown || {}).map(([skill, value]) => (
-                    <div key={skill}>
-                      <div className="mb-1 flex justify-between text-sm text-slate-600">
-                        <span>{skill}</span>
-                        <span className="font-semibold">{String(value)}%</span>
+                <CardContent>
+                  {(() => {
+                    const entries = Object.entries(report.skill_breakdown || {}).map(
+                      ([label, value]) => ({ label, value: Number(value) }),
+                    );
+                    // Sort by value desc so the strongest skills are on the "top"
+                    entries.sort((a, b) => b.value - a.value);
+
+                    if (entries.length >= 3) {
+                      return (
+                        <div className="grid gap-6 md:grid-cols-[1fr_200px]">
+                          <SkillRadar data={entries} />
+                          {/* Companion list for quick numeric read */}
+                          <div className="space-y-2">
+                            {entries.slice(0, 8).map((e) => {
+                              const col =
+                                e.value >= 80 ? "bg-emerald-500"
+                                : e.value >= 60 ? "bg-amber-500"
+                                : "bg-red-400";
+                              return (
+                                <div key={e.label} className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="truncate text-slate-600">{e.label}</span>
+                                    <span className="font-semibold text-slate-800">{e.value}</span>
+                                  </div>
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                    <div className={`h-full ${col}`} style={{ width: `${Math.max(0, Math.min(100, e.value))}%` }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                    // Fewer than 3 skills — fall back to horizontal bars
+                    return (
+                      <div className="space-y-3">
+                        {entries.map((e) => {
+                          const col =
+                            e.value >= 80 ? "bg-emerald-500"
+                            : e.value >= 60 ? "bg-amber-500"
+                            : "bg-red-400";
+                          return (
+                            <div key={e.label}>
+                              <div className="mb-1 flex justify-between text-sm text-slate-600">
+                                <span>{e.label}</span>
+                                <span className="font-semibold">{e.value}%</span>
+                              </div>
+                              <div className="h-2.5 rounded-full bg-slate-100">
+                                <div className={`h-2.5 rounded-full ${col}`} style={{ width: `${e.value}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="h-2.5 rounded-full bg-slate-100">
-                        <div
-                          className={`h-2.5 rounded-full ${Number(value) >= 80 ? "bg-emerald-500" : Number(value) >= 60 ? "bg-amber-500" : "bg-red-400"}`}
-                          style={{ width: `${value}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })()}
                 </CardContent>
               </Card>
 
-              {/* Claim validation */}
+              {/* Claim validation — expandable rows */}
               {report.claim_validation?.length > 0 && (
-                <Card className="rounded-3xl">
-                  <CardHeader><CardTitle>Claim Validation</CardTitle></CardHeader>
+                <Card className="rounded-3xl" data-print-block>
+                  <CardHeader>
+                    <CardTitle className="flex items-baseline gap-2">
+                      Claim Validation
+                      <span className="text-xs font-normal text-slate-400">
+                        Click a row to see the evidence
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent>
-                    <div className="overflow-x-auto"><Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Claim</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Evidence</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {report.claim_validation.map((claim: any) => (
-                          <TableRow key={claim.claim}>
-                            <TableCell className="text-sm">{claim.claim}</TableCell>
-                            <TableCell>
-                              <span className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                claim.status === "verified" ? "bg-emerald-100 text-emerald-700" :
-                                claim.status === "partial" ? "bg-amber-100 text-amber-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>{claim.status}</span>
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-600">{claim.evidence}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table></div>
+                    <ClaimValidationList claims={report.claim_validation} />
                   </CardContent>
                 </Card>
               )}
@@ -336,7 +393,7 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
               )}
 
               {/* Recommendation */}
-              <Card className="rounded-3xl">
+              <Card className="rounded-3xl" data-print-block>
                 <CardHeader><CardTitle>AI Recommendation</CardTitle></CardHeader>
                 <CardContent className="flex items-center gap-4">
                   <span className={`rounded-2xl px-6 py-3 text-lg font-bold ${
