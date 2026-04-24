@@ -26,6 +26,7 @@ export default function NewJobPage() {
     responsibilities: "",
     resume_match_weight: 50,
     interview_weight: 50,
+    response_type: "text" as "text" | "video" | "video_preferred" | "candidate_choice",
   });
 
   const weightError = form.resume_match_weight + form.interview_weight !== 100;
@@ -38,7 +39,8 @@ export default function NewJobPage() {
       skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
       custom_fields: {},
       is_active: true,
-    });
+      response_type: form.response_type,
+    } as any);
     router.push("/dashboard/jobs");
   }
 
@@ -106,6 +108,75 @@ export default function NewJobPage() {
           <div className="md:col-span-2">
             <Label className="mb-2 block">Responsibilities</Label>
             <Textarea rows={5} value={form.responsibilities} onChange={e => set("responsibilities", e.target.value)} placeholder="List day-to-day responsibilities..." />
+          </div>
+
+          {/* ── Interview Response Mode ── */}
+          <div className="md:col-span-2">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">Interview Response Mode</p>
+                <p className="text-xs text-emerald-700 mt-0.5">
+                  How should candidates answer interview questions? Video mode gives an
+                  authentic interview feel — only audio is transcribed, no video is ever stored.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    value: "text",
+                    label: "Text only",
+                    desc: "Classic textarea. Fastest for candidates. Lowest friction.",
+                  },
+                  {
+                    value: "video",
+                    label: "Video interview",
+                    desc: "Camera on, audio recorded & transcribed. No typing. No video storage.",
+                  },
+                  {
+                    value: "video_preferred",
+                    label: "Video preferred",
+                    desc: "Candidate can switch to text if needed — e.g. bad connection, accessibility.",
+                  },
+                  {
+                    value: "candidate_choice",
+                    label: "Let candidate choose",
+                    desc: "Candidate picks once, before the first question. Choice locked for the interview.",
+                  },
+                ].map((option) => {
+                  const active = form.response_type === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => set("response_type", option.value)}
+                      className={`text-left rounded-xl border p-3 transition-all ${
+                        active
+                          ? "border-emerald-500 bg-white ring-2 ring-emerald-500/30"
+                          : "border-slate-200 bg-white/60 hover:border-emerald-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`grid h-4 w-4 place-items-center rounded-full border-2 ${
+                            active
+                              ? "border-emerald-500 bg-emerald-500"
+                              : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800">{option.label}</span>
+                      </div>
+                      <p className="mt-1 ml-6 text-xs text-slate-500">{option.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500">
+                <span className="font-medium">Privacy:</span> in video mode we never store the
+                video stream. Audio is transcribed on our own server and deleted immediately.
+              </p>
+            </div>
           </div>
 
           {/* ── Scoring Weights ── */}

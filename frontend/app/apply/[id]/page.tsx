@@ -11,8 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  CameraBubble,
+  InterviewPreflight,
+  VoiceAnswerPanel,
+  useInterviewCamera,
+} from "@/components/video-interview";
 import { generateQuestions, getJob, submitAnswers, submitApplication } from "@/lib/api";
-import type { InterviewQuestion, Job } from "@/lib/types";
+import type { AnswerMode, InterviewQuestion, Job, ResponseType } from "@/lib/types";
 
 const STEPS = ["Sign In", "Personal Info", "Resume Upload", "AI Interview", "Done"];
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
@@ -76,6 +82,13 @@ export default function ApplyPage({ params }: { params: any }) {
 
   // Questions loading
   const [questionsLoading, setQuestionsLoading] = useState(false);
+
+  // ── Video interview state ──
+  const camera = useInterviewCamera();
+  // answerMode is null until candidate finishes the preflight (in video jobs).
+  // For text-only jobs we set it directly so the preflight is skipped entirely.
+  const [answerMode, setAnswerMode] = useState<AnswerMode | null>(null);
+  const [showPreflight, setShowPreflight] = useState(false);
 
   const [form, setForm] = useState({
     candidate_name: "", email: "", phone: "",
@@ -221,6 +234,17 @@ export default function ApplyPage({ params }: { params: any }) {
   async function handleSubmitAndStartInterview() {
     if (!uploadedAppId) return;
     setStep(4);
+    // Decide whether to run the video preflight. Jobs with response_type=text
+    // (or unset, for old jobs) skip it entirely and go straight to text
+    // questions — zero change vs. Phase 1 for those jobs.
+    const responseType = (job?.response_type ?? "text") as ResponseType;
+    if (responseType === "text") {
+      setAnswerMode("text");
+      setShowPreflight(false);
+    } else {
+      setAnswerMode(null);
+      setShowPreflight(true);
+    }
     // Use cached questions from validation step — no extra API call needed
     if (cachedQuestions.length > 0) {
       setQuestions(cachedQuestions);
@@ -493,7 +517,19 @@ export default function ApplyPage({ params }: { params: any }) {
               </div>
             )}
 
-            {step === 4 && !questionsLoading && currentQuestion && (
+            {/* Preflight (consent + camera permission) for video-capable jobs */}
+            {step === 4 && !questionsLoading && showPreflight && answerMode === null && job && (
+              <InterviewPreflight
+                mode={(job.response_type ?? "text") as Exclude<ResponseType, "text">}
+                cameraStatus={camera.status}
+                cameraError={camera.error}
+                onRequestCamera={() => camera.request()}
+                onConfirmVideo={() => { setAnswerMode("video"); setShowPreflight(false); }}
+                onConfirmText={() => { setAnswerMode("text"); setShowPreflight(false); camera.stop(); }}
+              />
+            )}
+
+            {step === 4 && !questionsLoading && !showPreflight && currentQuestion && (
               <div className="space-y-6">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm text-slate-500">
@@ -504,6 +540,8 @@ export default function ApplyPage({ params }: { params: any }) {
                 </div>
                 <div className="space-y-4">
                   <h3 className="text-xl font-semibold text-slate-950">{currentQuestion.prompt}</h3>
+                  {/* MCQ and one_word always use the original UI — voice answers
+                      don't make sense for choosing an option or a single word. */}
                   {currentQuestion.type === "mcq" ? (
                     <div className="space-y-3">
                       {currentQuestion.options?.map(option => (
@@ -515,6 +553,23 @@ export default function ApplyPage({ params }: { params: any }) {
                     </div>
                   ) : currentQuestion.type === "one_word" ? (
                     <Input placeholder="Your answer" value={answers[currentQuestion.id] ?? ""} onChange={e => setAnswers(a => ({ ...a, [currentQuestion.id]: e.target.value }))} />
+                  ) : answerMode === "video" && applicationId !== null ? (
+                    <VoiceAnswerPanel
+                      applicationId={applicationId}
+                      questionIndex={questionIndex}
+                      questionId={currentQuestion.id}
+                      stream={camera.stream}
+                      existingAnswer={answers[currentQuestion.id]}
+                      onTranscribed={(text) => setAnswers(a => ({ ...a, [currentQuestion.id]: text }))}
+                      onSwitchToText={
+                        // Switch-to-text only available on video_preferred jobs.
+                        // Hard "video" jobs lock to video; "candidate_choice" locks
+                        // after the preflight pick.
+                        job?.response_type === "video_preferred"
+                          ? () => { setAnswerMode("text"); camera.stop(); }
+                          : undefined
+                      }
+                    />
                   ) : (
                     <Textarea
                       className={currentQuestion.type === "coding" ? "font-mono text-sm" : ""}
@@ -550,6 +605,11 @@ export default function ApplyPage({ params }: { params: any }) {
           </CardContent>
         </Card>
       </main>
+
+      {/* Self-view bubble — only while in the interview step and camera is granted */}
+      {step === 4 && answerMode === "video" && (
+        <CameraBubble stream={camera.stream} />
+      )}
     </div>
   );
 }

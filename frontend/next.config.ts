@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // `eslint` is valid per Next.js docs but missing from the installed
+  // NextConfig typedef — ts-expect-error keeps `tsc --noEmit` clean.
+  // @ts-expect-error — NextConfig type lags Next.js runtime config
   eslint: {
     ignoreDuringBuilds: true,
   },

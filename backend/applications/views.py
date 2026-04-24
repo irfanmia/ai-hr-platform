@@ -5,6 +5,7 @@ from rest_framework import permissions, response, status, views, viewsets
 from rest_framework.decorators import action
 
 from ai_engine.answer_evaluator import evaluate_answers
+from ai_engine.audio_transcriber import TranscriptionError, transcribe_audio
 from ai_engine.question_generator import generate_interview_questions
 from ai_engine.report_generator import compile_ai_report
 from ai_engine.resume_parser import parse_resume_for_application
@@ -21,7 +22,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     queryset = Application.objects.select_related("job").all()
 
     def get_permissions(self):
-        if self.action in {"create", "generate_questions", "submit_answers"}:
+        if self.action in {"create", "generate_questions", "submit_answers", "transcribe"}:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -124,6 +125,91 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application.save(update_fields=["custom_answers", "ai_report", "ai_score", "status"])
 
         return response.Response({"application_id": application.id, "report": report})
+
+    @action(detail=True, methods=["post"], url_path="transcribe")
+    def transcribe(self, request, pk=None):
+        """
+        Accept a short audio blob (the candidate's spoken answer to ONE
+        interview question) and return the transcribed text.
+
+        Audio is transcribed via Groq Whisper, biased with the job + resume
+        skills so technical vocabulary survives intact. The audio bytes
+        are NEVER persisted — they live in memory just long enough to call
+        the Whisper API and are released immediately.
+
+        Multipart form expected:
+          file:           the audio Blob (webm/opus or mp4/aac)
+          question_index: optional, for client-side correlation only
+        """
+        application = self.get_object()
+        audio_file = request.FILES.get("file") or request.FILES.get("audio")
+        if not audio_file:
+            return response.Response(
+                {"error": "missing_audio", "message": "No audio file in request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Surface the job & resume skill list to bias Whisper toward correct
+        # technical vocabulary (React, Kubernetes, etc.) instead of common
+        # English homophones ("communities" for "Kubernetes" is real).
+        job_skills = list(application.job.skills or [])
+        stored = application.custom_answers or {}
+        parsed_resume = stored.get("parsed_resume") or {}
+        resume_skills = list(parsed_resume.get("skills") or [])
+
+        # Read all bytes once. The browser blob is small (Opus ~80 KB/min).
+        try:
+            audio_bytes = audio_file.read()
+        finally:
+            # Best-effort: drop reference. Django won't write to /tmp because
+            # the upload is small enough to live in memory; if it did, the
+            # InMemoryUploadedFile / TemporaryUploadedFile is GC'd here.
+            try:
+                audio_file.close()
+            except Exception:
+                pass
+
+        try:
+            result = transcribe_audio(
+                audio_bytes=audio_bytes,
+                filename=getattr(audio_file, "name", "answer.webm") or "answer.webm",
+                job_skills=job_skills,
+                resume_skills=resume_skills,
+            )
+        except TranscriptionError as exc:
+            code = str(exc)
+            user_messages = {
+                "empty_audio": "No audio captured — try recording again.",
+                "audio_too_large": "That recording was too large. Keep answers under 3 minutes.",
+                "audio_too_long": "That recording was too long. Keep answers under 3 minutes.",
+                "audio_too_short": "Recording was too short. Please give a fuller answer.",
+                "empty_transcription": "We couldn't make out any words — please re-record clearly.",
+                "faster_whisper_not_installed": "Server transcription engine is not installed.",
+                "whisper_inference_error": "Transcription failed on the server — please try again.",
+            }
+            # Infrastructure errors → 503, user-input errors → 400
+            infra = {"faster_whisper_not_installed", "whisper_inference_error"}
+            http_status = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if code in infra
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return response.Response(
+                {"error": code, "message": user_messages.get(code, "Transcription failed.")},
+                status=http_status,
+            )
+        finally:
+            # Release the bytes immediately. We don't persist audio anywhere.
+            audio_bytes = b""  # noqa: F841 — explicit clear
+
+        return response.Response(
+            {
+                "text": result.text,
+                "duration_ms": result.duration_ms,
+                "language": result.language,
+                "model": result.model,
+            }
+        )
 
 
 class DashboardApplicationsView(views.APIView):

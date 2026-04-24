@@ -100,6 +100,46 @@ export async function submitAnswers(applicationId: number, answers: Record<strin
   return response.data;
 }
 
+/**
+ * Upload a short audio blob for a single interview answer, get back the
+ * transcript. Audio is never stored server-side — it's transcribed via
+ * Groq Whisper and discarded.
+ *
+ * The optional `questionIndex` is passed through for client-side correlation
+ * only; the server doesn't persist it.
+ */
+export interface TranscriptionResponse {
+  text: string;
+  duration_ms: number;
+  language: string;
+  model: string;
+}
+export async function transcribeAnswer(
+  applicationId: number,
+  audioBlob: Blob,
+  filename: string,
+  questionIndex?: number,
+): Promise<TranscriptionResponse> {
+  const formData = new FormData();
+  formData.append("file", audioBlob, filename);
+  if (questionIndex !== undefined) {
+    formData.append("question_index", String(questionIndex));
+  }
+  const response = await api.post<TranscriptionResponse>(
+    `/applications/${applicationId}/transcribe/`,
+    formData,
+    { validateStatus: (s) => s < 500 || s === 503 },
+  );
+  if (response.status >= 400) {
+    const err: Error & { response?: typeof response } = new Error(
+      (response.data as any)?.message || "Transcription failed",
+    );
+    err.response = response;
+    throw err;
+  }
+  return response.data;
+}
+
 export async function login(email: string, password: string) {
   const response = await api.post<LoginResponse>("/auth/login/", {
     username: email,

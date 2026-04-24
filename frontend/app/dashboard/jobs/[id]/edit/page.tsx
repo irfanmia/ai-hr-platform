@@ -31,6 +31,7 @@ export default function EditJobPage({ params }: { params: any }) {
     is_active: true,
     resume_match_weight: 50,
     interview_weight: 50,
+    response_type: "text" as "text" | "video" | "video_preferred" | "candidate_choice",
   });
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function EditJobPage({ params }: { params: any }) {
         is_active: job.is_active,
         resume_match_weight: (job as any).resume_match_weight ?? 50,
         interview_weight: (job as any).interview_weight ?? 50,
+        response_type: ((job as any).response_type ?? "text") as "text" | "video" | "video_preferred" | "candidate_choice",
       });
       setLoading(false);
     });
@@ -64,7 +66,8 @@ export default function EditJobPage({ params }: { params: any }) {
       custom_fields: {},
       resume_match_weight: form.resume_match_weight,
       interview_weight: form.interview_weight,
-    });
+      response_type: form.response_type,
+    } as any);
     router.push("/dashboard/jobs");
   }
 
@@ -97,6 +100,52 @@ export default function EditJobPage({ params }: { params: any }) {
             <Label className="mb-2 block">Max experience</Label>
             <Input type="number" value={form.experience_years_max} onChange={(e) => setForm((current) => ({ ...current, experience_years_max: Number(e.target.value) }))} />
           </div>
+          {/* Interview Response Mode */}
+          <div className="md:col-span-2">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">Interview Response Mode</p>
+                <p className="text-xs text-emerald-700 mt-0.5">
+                  How should candidates answer interview questions? Changing this affects new applications only.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  { value: "text", label: "Text only", desc: "Classic textarea. Fastest for candidates." },
+                  { value: "video", label: "Video interview", desc: "Camera on, audio recorded & transcribed. No video stored." },
+                  { value: "video_preferred", label: "Video preferred", desc: "Candidate can switch to text if needed." },
+                  { value: "candidate_choice", label: "Let candidate choose", desc: "Candidate picks once, before question 1." },
+                ].map((option) => {
+                  const active = form.response_type === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, response_type: option.value as typeof f.response_type }))}
+                      className={`text-left rounded-xl border p-3 transition-all ${
+                        active
+                          ? "border-emerald-500 bg-white ring-2 ring-emerald-500/30"
+                          : "border-slate-200 bg-white/60 hover:border-emerald-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`grid h-4 w-4 place-items-center rounded-full border-2 ${
+                            active ? "border-emerald-500 bg-emerald-500" : "border-slate-300 bg-white"
+                          }`}
+                        >
+                          {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                        </span>
+                        <span className="text-sm font-medium text-slate-800">{option.label}</span>
+                      </div>
+                      <p className="mt-1 ml-6 text-xs text-slate-500">{option.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Scoring Weights */}
           <div className="md:col-span-2">
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5 space-y-4">
