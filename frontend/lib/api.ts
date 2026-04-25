@@ -290,6 +290,30 @@ export async function downloadApplicationPdf(
 }
 
 /**
+ * Upload one identity-verification snapshot (JPEG) for the current
+ * application. Backend stores under media/identity_snapshots/<id>/
+ * and appends to Application.identity_snapshots.
+ *
+ * Returns { ok, path, captured_at, count } on success, or { skipped, reason }
+ * if the job has snapshots disabled. Never throws on transient network errors
+ * — caller is fire-and-forget.
+ */
+export async function uploadIdentitySnapshot(
+  applicationId: number,
+  blob: Blob,
+): Promise<void> {
+  try {
+    const fd = new FormData();
+    fd.append("file", blob, "snapshot.jpg");
+    await api.post(`/applications/${applicationId}/identity-snapshot/`, fd, {
+      validateStatus: (s) => s < 500,
+    });
+  } catch {
+    // Snapshots are best-effort; never break the interview flow because of one
+  }
+}
+
+/**
  * Public — used by the /verify page after a QR scan. No auth required.
  */
 export interface VerifyResponse {

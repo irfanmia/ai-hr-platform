@@ -16,6 +16,7 @@ import {
   InterviewPreflight,
   VoiceAnswerPanel,
   type VoiceAnswerPanelHandle,
+  useIdentitySnapshots,
   useInterviewCamera,
 } from "@/components/video-interview";
 import { generateQuestions, getJob, submitAnswers, submitApplication } from "@/lib/api";
@@ -87,6 +88,17 @@ export default function ApplyPage({ params }: { params: any }) {
   // When the candidate clicks "Next", we ask the panel to stop & transcribe.
   const voicePanelRef = useRef<VoiceAnswerPanelHandle | null>(null);
   const [advancing, setAdvancing] = useState(false);
+
+  // Identity verification: 3 random snapshots across the interview window.
+  // Server-side honours the per-job toggle even if the frontend tries; we
+  // also pass `enabled` based on the job config to avoid even attempting
+  // capture when HR has it off (saves bandwidth + smaller privacy footprint).
+  useIdentitySnapshots({
+    applicationId,
+    stream: camera.stream,
+    enabled: (job as any)?.identity_snapshots_enabled !== false,
+    armed: step === 4 && answerMode === "video",
+  });
 
   // ── Silent-answer handling ──
   // The candidate gets ONE chance per interview to retry a missed question.

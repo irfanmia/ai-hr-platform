@@ -196,6 +196,60 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
         </div>
       </div>
 
+      {/* ── Identity verification snapshots (HR-only) ── */}
+      {(() => {
+        const snaps = (application as any).identity_snapshots as
+          | { path: string; captured_at: string }[]
+          | undefined;
+        if (!snaps || snaps.length === 0) return null;
+        // Snapshots live under /media/<path> on the backend, proxied via Vercel
+        // rewrites so the same JWT-protected pattern as resume_url works.
+        const mediaUrl = (rel: string) =>
+          `/media/${rel.replace(/^\/?media\//, "")}`;
+        return (
+          <Card className="no-print mb-6 rounded-3xl border-indigo-100">
+            <CardHeader>
+              <CardTitle className="flex items-baseline justify-between">
+                <span>Identity verification ({snaps.length})</span>
+                <span className="text-xs font-normal text-slate-500">
+                  Random frames captured during the interview
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {snaps.map((s, i) => (
+                  <a
+                    key={s.path + i}
+                    href={mediaUrl(s.path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group block overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                    title={`Open snapshot ${i + 1} (captured ${new Date(s.captured_at).toLocaleString()})`}
+                  >
+                    <img
+                      src={mediaUrl(s.path)}
+                      alt={`Identity snapshot ${i + 1}`}
+                      className="block aspect-[4/3] w-full object-cover transition group-hover:opacity-90"
+                      loading="lazy"
+                    />
+                    <p className="px-2 py-1 text-[10px] text-slate-500">
+                      {new Date(s.captured_at).toLocaleTimeString([], {
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </p>
+                  </a>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-slate-400">
+                These photos are visible only to HR. They&apos;re deleted automatically when
+                this application is rejected.
+              </p>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* ── Inline responses viewer (HR can read Q&A without downloading) ── */}
       {showResponses && (() => {
         const stored = (application.custom_answers as any) || {};

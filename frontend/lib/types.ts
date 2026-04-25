@@ -35,6 +35,8 @@ export interface Job {
   interview_weight?: number;
   /** Response mode for interview answers. Defaults to "text" for older jobs. */
   response_type?: ResponseType;
+  /** Whether to capture random identity snapshots during the interview. */
+  identity_snapshots_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +56,8 @@ export interface Application {
   status: ApplicationStatus;
   ai_report: AIReport | null;
   ai_score: number | null;
+  /** List of identity snapshots captured during the interview (HR only). */
+  identity_snapshots?: { path: string; captured_at: string }[];
   created_at: string;
 }
 

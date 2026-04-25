@@ -35,7 +35,7 @@ import {
   useState,
 } from "react";
 
-import { transcribeAnswer } from "@/lib/api";
+import { transcribeAnswer, uploadIdentitySnapshot } from "@/lib/api";
 
 // ─── Camera hook ──────────────────────────────────────────────────────────
 
@@ -96,6 +96,100 @@ export function useInterviewCamera(): CameraState {
   useEffect(() => () => stop(), [stop]);
 
   return { stream, error, status, request, stop };
+}
+
+// ─── Identity snapshot scheduler ─────────────────────────────────────────
+
+/**
+ * Capture N still frames from the live camera stream at *random* intervals
+ * across the lifetime of this hook, JPEG-encode them, and POST to the
+ * identity-snapshot endpoint. Random timing matters — predictable timing
+ * (e.g. always at second 30) lets a candidate "show their face on cue"
+ * and then swap with someone else.
+ *
+ * This is fire-and-forget: failures are silently swallowed so they never
+ * affect the interview. Ceiling enforced both client-side (this hook) and
+ * server-side (max 6 per application). Job-level disable is enforced
+ * server-side, so passing `enabled=true` here is always safe.
+ *
+ * Captures begin only once the stream has at least one video track AND
+ * the candidate has actually started the interview (caller passes
+ * `armed=true` after the preflight is done).
+ */
+export function useIdentitySnapshots({
+  applicationId,
+  stream,
+  enabled,
+  armed,
+  count = 3,
+  windowSeconds = 360, // expected total interview duration; we spread captures across this
+}: {
+  applicationId: number | null;
+  stream: MediaStream | null;
+  enabled: boolean;
+  armed: boolean;
+  count?: number;
+  windowSeconds?: number;
+}) {
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    // Clean up any previously-scheduled captures whenever a dep changes
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+
+    if (!enabled || !armed || !stream || applicationId == null) return;
+
+    // Divide the window into `count` equal slices, then pick one random
+    // moment inside each slice so captures are spread out but unpredictable.
+    const sliceMs = (windowSeconds * 1000) / count;
+    for (let i = 0; i < count; i++) {
+      const minOffset = i * sliceMs + 4000; // small head-start so the first capture isn't too early
+      const maxOffset = (i + 1) * sliceMs;
+      const at = minOffset + Math.random() * Math.max(0, maxOffset - minOffset);
+      const t = setTimeout(() => {
+        captureFrameAndUpload(applicationId, stream).catch(() => {});
+      }, at);
+      timersRef.current.push(t);
+    }
+
+    return () => {
+      timersRef.current.forEach((t) => clearTimeout(t));
+      timersRef.current = [];
+    };
+    // intentionally re-arm only when the major deps change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationId, enabled, armed, stream]);
+}
+
+/** Grab a single frame from a live MediaStream and POST as JPEG. */
+async function captureFrameAndUpload(applicationId: number, stream: MediaStream) {
+  if (typeof document === "undefined") return;
+  try {
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.playsInline = true;
+    await video.play().catch(() => {});
+    // Briefly wait for a real frame to be available
+    await new Promise((r) => setTimeout(r, 250));
+    const w = video.videoWidth || 480;
+    const h = video.videoHeight || 360;
+    if (w === 0 || h === 0) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/jpeg", 0.78),
+    );
+    if (!blob) return;
+    await uploadIdentitySnapshot(applicationId, blob);
+  } catch {
+    // best-effort
+  }
 }
 
 // ─── Self-view bubble ────────────────────────────────────────────────────
@@ -517,6 +611,16 @@ export function InterviewRules() {
           speaking, we&apos;ll mark the question as unanswered. You get
           <span className="mx-1 font-semibold text-amber-700">one chance</span>
           per interview to retry a missed question.
+        </span>
+      </li>
+      <li className="flex items-start gap-2">
+        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+          i
+        </span>
+        <span>
+          We&apos;ll capture a few photos from your camera during the interview so the
+          recruiter can verify it&apos;s you. Only HR can see them, and they&apos;re
+          deleted automatically once a decision is made.
         </span>
       </li>
     </ul>

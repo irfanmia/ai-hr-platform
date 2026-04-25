@@ -22,6 +22,10 @@ class Application(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     ai_report = models.JSONField(null=True, blank=True)
     ai_score = models.IntegerField(null=True, blank=True)
+    # Identity verification snapshots — list of dicts:
+    #   [{"path": "identity_snapshots/<id>/<ts>.jpg", "captured_at": "<iso>"}]
+    # Files live under MEDIA_ROOT. Auto-deleted when status moves to rejected.
+    identity_snapshots = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

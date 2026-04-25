@@ -27,6 +27,7 @@ export default function NewJobPage() {
     resume_match_weight: 50,
     interview_weight: 50,
     response_type: "text" as "text" | "video" | "video_preferred" | "candidate_choice",
+    identity_snapshots_enabled: true,
   });
 
   const weightError = form.resume_match_weight + form.interview_weight !== 100;
@@ -40,6 +41,7 @@ export default function NewJobPage() {
       custom_fields: {},
       is_active: true,
       response_type: form.response_type,
+      identity_snapshots_enabled: form.identity_snapshots_enabled,
     } as any);
     router.push("/dashboard/jobs");
   }
@@ -176,6 +178,28 @@ export default function NewJobPage() {
                 <span className="font-medium">Privacy:</span> in video mode we never store the
                 video stream. Audio is transcribed on our own server and deleted immediately.
               </p>
+
+              {/* ── Identity verification snapshots toggle ── */}
+              {form.response_type !== "text" && (
+                <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-white p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-emerald-600"
+                    checked={form.identity_snapshots_enabled}
+                    onChange={(e) => set("identity_snapshots_enabled", e.target.checked)}
+                  />
+                  <div className="text-xs">
+                    <p className="font-semibold text-slate-800">
+                      Capture identity snapshots
+                    </p>
+                    <p className="mt-0.5 text-slate-500">
+                      Three random still frames from the candidate&apos;s camera during the
+                      interview, so you can verify it&apos;s the right person. Disclosed to the
+                      candidate up front; auto-deleted when an application is rejected.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 

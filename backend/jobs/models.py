@@ -45,6 +45,19 @@ class Job(models.Model):
             "interview-feel but only audio is transcribed — no video is stored server-side."
         ),
     )
+    # Identity verification: capture a few random still frames during the
+    # interview so HR can confirm the candidate isn't being impersonated.
+    # Only meaningful when response_type involves video. Auto-deleted when
+    # the application reaches a rejected status.
+    identity_snapshots_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            "If on (and the role uses video), 3 random still frames from the candidate's "
+            "camera are captured during the interview for HR identity verification. "
+            "Snapshots auto-delete when the candidate is rejected. Disable for low-stakes "
+            "roles or jurisdictions where biometric capture is restricted."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

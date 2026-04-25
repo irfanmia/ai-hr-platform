@@ -137,6 +137,7 @@ def build_combined_pdf(
     questions: list[dict],
     answers: dict,
     scores: Optional[dict] = None,
+    identity_snapshots: Optional[list[dict]] = None,
 ) -> bytes:
     """
     Build the full document pack: resume + responses + report.
@@ -158,7 +159,10 @@ def build_combined_pdf(
         doc_type="combined",  # keep token consistent
         doc_title="Document Pack — Responses",
     )
-    responses_bytes = build_responses_pdf(responses_meta, questions, answers, scores)
+    responses_bytes = build_responses_pdf(
+        responses_meta, questions, answers, scores,
+        identity_snapshots=identity_snapshots,
+    )
 
     # ─── 3. Report ───────────────────────────────────────────────────────
     report_meta = replace(

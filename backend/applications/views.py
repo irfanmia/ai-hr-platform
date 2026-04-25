@@ -1,4 +1,8 @@
+import os
+import uuid
 from datetime import datetime, timezone as tz
+from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db.models import Avg, Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -48,7 +52,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     queryset = Application.objects.select_related("job").all()
 
     def get_permissions(self):
-        if self.action in {"create", "generate_questions", "submit_answers", "transcribe"}:
+        if self.action in {"create", "generate_questions", "submit_answers", "transcribe", "identity_snapshot"}:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
@@ -249,6 +253,73 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="identity-snapshot")
+    def identity_snapshot(self, request, pk=None):
+        """
+        Accept ONE still frame (JPEG) captured from the candidate's camera
+        during the interview, save under media/identity_snapshots/<id>/, and
+        append metadata to application.identity_snapshots.
+
+        Per design we capture 3 random frames per interview; this endpoint
+        is called once per frame from the browser.
+
+        We silently no-op (200 with skipped=true) if the candidate's job
+        has snapshots disabled — keeps the frontend simpler. Real failures
+        (no file, oversized, IO error) return 400.
+        """
+        application = self.get_object()
+        job = application.job
+        if not job or not getattr(job, "identity_snapshots_enabled", True):
+            return response.Response({"skipped": True, "reason": "disabled_for_job"}, status=200)
+
+        upload = request.FILES.get("file") or request.FILES.get("snapshot")
+        if not upload:
+            return response.Response(
+                {"error": "missing_file", "message": "No snapshot in request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Cap at 1 MB — JPEGs from a 480×360 webcam frame are ~30-80 KB
+        if upload.size > 1_000_000:
+            return response.Response(
+                {"error": "snapshot_too_large", "message": "Snapshot exceeded the 1 MB limit."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Cap captures at 6 per application as a hard ceiling — design says
+        # 3, this protects against a buggy / malicious client spamming uploads.
+        existing = application.identity_snapshots or []
+        if len(existing) >= 6:
+            return response.Response(
+                {"skipped": True, "reason": "limit_reached"}, status=200,
+            )
+
+        captured_at = datetime.now(tz=tz.utc)
+        # File path: identity_snapshots/<app_id>/<iso-utc>-<short_uuid>.jpg
+        # short uuid avoids collisions if two browser timers fire on the
+        # same UTC second.
+        filename = f"{captured_at.strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg"
+        rel_path = f"identity_snapshots/{application.id}/{filename}"
+        try:
+            saved_path = default_storage.save(rel_path, upload)
+        except Exception as exc:  # noqa: BLE001
+            return response.Response(
+                {"error": "storage_error", "message": f"Couldn't save snapshot: {exc}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        application.identity_snapshots = existing + [{
+            "path": saved_path,
+            "captured_at": captured_at.isoformat(),
+        }]
+        application.save(update_fields=["identity_snapshots"])
+        return response.Response({
+            "ok": True,
+            "path": saved_path,
+            "captured_at": captured_at.isoformat(),
+            "count": len(application.identity_snapshots),
+        })
+
 
 class DashboardApplicationsView(views.APIView):
     permission_classes = [permissions.IsAdminUser]
@@ -310,9 +381,33 @@ class ApplicationDetailView(views.APIView):
 
     def patch(self, request, pk: int):
         application = get_object_or_404(Application, pk=pk)
+        prev_status = application.status
         serializer = ApplicationStatusSerializer(application, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # Auto-delete identity snapshots when the application reaches a
+        # terminal "rejected" state — per design (smallest legal/biometric
+        # footprint). The DB record's `identity_snapshots` field is cleared
+        # so the HR detail page no longer surfaces stale references.
+        if (
+            prev_status != Application.Status.REJECTED
+            and application.status == Application.Status.REJECTED
+            and application.identity_snapshots
+        ):
+            for snap in application.identity_snapshots:
+                rel = snap.get("path") or ""
+                if not rel:
+                    continue
+                try:
+                    if default_storage.exists(rel):
+                        default_storage.delete(rel)
+                except Exception:
+                    # Don't block the status change if a stray file is gone
+                    pass
+            application.identity_snapshots = []
+            application.save(update_fields=["identity_snapshots"])
+
         return response.Response(ApplicationSerializer(application, context={"request": request}).data)
 
 
@@ -374,6 +469,22 @@ class _ApplicationPdfBase(views.APIView):
         scored_answers = evaluation.get("scored_answers") or []
         scores = {s.get("question_id"): s.get("score") for s in scored_answers if s.get("question_id")}
 
+        # Resolve identity snapshot paths to absolute disk locations so the
+        # PDF builders (which are decoupled from Django settings) can embed
+        # them. Stale entries are silently dropped at render time.
+        snaps_for_pdf = []
+        for snap in (app.identity_snapshots or []):
+            rel = snap.get("path") or ""
+            if not rel:
+                continue
+            abs_path = os.path.join(settings.MEDIA_ROOT, rel.lstrip("/"))
+            snaps_for_pdf.append({
+                "abs_path": abs_path,
+                "captured_at": snap.get("captured_at"),
+            })
+        # Stash on the app instance for subclass _build_pdf overrides to read
+        app._snaps_for_pdf = snaps_for_pdf
+
         metadata = _build_pdf_metadata(app, self.DOC_TYPE, self.DOC_TITLE)
 
         try:
@@ -397,7 +508,10 @@ class ApplicationResponsesPDFView(_ApplicationPdfBase):
     FILENAME_SUFFIX = "responses"
 
     def _build_pdf(self, app, metadata, questions, answers, scores):
-        return build_responses_pdf(metadata, questions, answers, scores)
+        return build_responses_pdf(
+            metadata, questions, answers, scores,
+            identity_snapshots=getattr(app, "_snaps_for_pdf", None),
+        )
 
 
 class ApplicationReportPDFView(_ApplicationPdfBase):
@@ -415,7 +529,10 @@ class ApplicationCombinedPDFView(_ApplicationPdfBase):
     FILENAME_SUFFIX = "documentpack"
 
     def _build_pdf(self, app, metadata, questions, answers, scores):
-        return build_combined_pdf(app, metadata, questions, answers, scores)
+        return build_combined_pdf(
+            app, metadata, questions, answers, scores,
+            identity_snapshots=getattr(app, "_snaps_for_pdf", None),
+        )
 
 
 # ─── Public verification endpoint ─────────────────────────────────────────

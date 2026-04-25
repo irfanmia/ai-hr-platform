@@ -32,6 +32,7 @@ export default function EditJobPage({ params }: { params: any }) {
     resume_match_weight: 50,
     interview_weight: 50,
     response_type: "text" as "text" | "video" | "video_preferred" | "candidate_choice",
+    identity_snapshots_enabled: true,
   });
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function EditJobPage({ params }: { params: any }) {
         resume_match_weight: (job as any).resume_match_weight ?? 50,
         interview_weight: (job as any).interview_weight ?? 50,
         response_type: ((job as any).response_type ?? "text") as "text" | "video" | "video_preferred" | "candidate_choice",
+        identity_snapshots_enabled: (job as any).identity_snapshots_enabled !== false,
       });
       setLoading(false);
     });
@@ -67,6 +69,7 @@ export default function EditJobPage({ params }: { params: any }) {
       resume_match_weight: form.resume_match_weight,
       interview_weight: form.interview_weight,
       response_type: form.response_type,
+      identity_snapshots_enabled: form.identity_snapshots_enabled,
     } as any);
     router.push("/dashboard/jobs");
   }
@@ -110,12 +113,12 @@ export default function EditJobPage({ params }: { params: any }) {
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                {[
+                {([
                   { value: "text", label: "Text only", desc: "Classic textarea. Fastest for candidates." },
                   { value: "video", label: "Video interview", desc: "Camera on, audio recorded & transcribed. No video stored." },
                   { value: "video_preferred", label: "Video preferred", desc: "Candidate can switch to text if needed." },
                   { value: "candidate_choice", label: "Let candidate choose", desc: "Candidate picks once, before question 1." },
-                ].map((option) => {
+                ] as const).map((option) => {
                   const active = form.response_type === option.value;
                   return (
                     <button
@@ -143,6 +146,26 @@ export default function EditJobPage({ params }: { params: any }) {
                   );
                 })}
               </div>
+
+              {form.response_type !== "text" && (
+                <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-white p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-emerald-600"
+                    checked={form.identity_snapshots_enabled}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, identity_snapshots_enabled: e.target.checked }))
+                    }
+                  />
+                  <div className="text-xs">
+                    <p className="font-semibold text-slate-800">Capture identity snapshots</p>
+                    <p className="mt-0.5 text-slate-500">
+                      Three random photos from the candidate&apos;s camera during the
+                      interview. Disclosed to the candidate; auto-deleted on rejection.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
           </div>
 
