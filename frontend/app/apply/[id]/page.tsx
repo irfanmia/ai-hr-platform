@@ -82,15 +82,25 @@ export default function ApplyPage({ params }: { params: any }) {
 
   // ── Video interview state ──
   const camera = useInterviewCamera();
-  // answerMode is null until candidate finishes the preflight (in video jobs).
-  // For text-only jobs we set it directly so the preflight is skipped entirely.
   const [answerMode, setAnswerMode] = useState<AnswerMode | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
   // When the candidate clicks "Next", we ask the panel to stop & transcribe.
-  // The advance is awaited so the next question doesn't appear before the
-  // current answer is captured. Loader shows during the (~1-10s) transcribe.
   const voicePanelRef = useRef<VoiceAnswerPanelHandle | null>(null);
   const [advancing, setAdvancing] = useState(false);
+
+  // ── Silent-answer handling ──
+  // The candidate gets ONE chance per interview to retry a missed question.
+  // After they use it (or skip with "I don't know"), future silent answers
+  // are auto-marked as no-response without prompting.
+  const NO_RESPONSE_MARKER = "[no response]";
+  const DONT_KNOW_MARKER = "I don't know.";
+  const [silenceRetryUsed, setSilenceRetryUsed] = useState(false);
+  // When a silent answer is detected AND the retry chance is still available,
+  // we pause the flow and show this prompt instead of advancing.
+  const [silentPrompt, setSilentPrompt] = useState<{
+    questionId: string;
+    isLast: boolean;
+  } | null>(null);
 
   const [form, setForm] = useState({
     candidate_name: "", email: "", phone: "",
@@ -264,31 +274,17 @@ export default function ApplyPage({ params }: { params: any }) {
     }
   }
 
-  async function handleNextQuestion() {
+  /** Push a final answer for the current question and either advance to the
+   *  next or submit the whole interview. Used by both the normal flow and
+   *  the silent-prompt resolution paths below. */
+  async function commitAnswerAndAdvance(textForCurrent: string) {
     if (!currentQuestion || !applicationId) return;
-    setAdvancing(true);
-
-    // Collect the answer for this question. For text questions it's already
-    // in `answers`. For video answers we ask the panel to stop + transcribe.
-    let answersToSubmit = answers;
-    const isVoiceQuestion =
-      answerMode === "video" &&
-      ["descriptive", "coding", "scenario"].includes(currentQuestion.type);
-
-    if (isVoiceQuestion && voicePanelRef.current) {
-      try {
-        const text = await voicePanelRef.current.stopAndTranscribe();
-        answersToSubmit = { ...answersToSubmit, [currentQuestion.id]: text };
-      } catch {
-        // Panel surfaces its own error UI; don't advance on transcription failure
-        setAdvancing(false);
-        return;
-      }
-    }
-
+    const finalAnswers = { ...answers, [currentQuestion.id]: textForCurrent };
+    setAnswers(finalAnswers);
     if (questionIndex === questions.length - 1) {
       try {
-        await submitAnswers(applicationId, answersToSubmit);
+        setAdvancing(true);
+        await submitAnswers(applicationId, finalAnswers);
         setStep(5);
       } finally {
         setAdvancing(false);
@@ -297,6 +293,77 @@ export default function ApplyPage({ params }: { params: any }) {
     }
     setAdvancing(false);
     startTransition(() => setQuestionIndex((v) => v + 1));
+  }
+
+  async function handleNextQuestion() {
+    if (!currentQuestion || !applicationId) return;
+    setAdvancing(true);
+
+    // Coding questions ALWAYS use the textarea/code editor — even in video
+    // mode. Speaking code aloud is a terrible UX. MCQ/one_word always render
+    // their own widgets. Only descriptive + scenario flow through the voice
+    // panel when the candidate picked video mode.
+    const isVoiceQuestion =
+      answerMode === "video" &&
+      ["descriptive", "scenario"].includes(currentQuestion.type);
+
+    // ── Text / MCQ / one-word path: nothing fancy, just advance ──────────
+    if (!isVoiceQuestion) {
+      await commitAnswerAndAdvance(answers[currentQuestion.id] ?? "");
+      return;
+    }
+
+    // ── Video path: stop the recorder and inspect the result ─────────────
+    if (!voicePanelRef.current) {
+      setAdvancing(false);
+      return;
+    }
+    let result;
+    try {
+      result = await voicePanelRef.current.stopAndTranscribe();
+    } catch {
+      // Hard transcription failure — panel surfaces its own error UI
+      setAdvancing(false);
+      return;
+    }
+
+    if (!result.silent && result.text.trim()) {
+      // Got a real answer — store and advance
+      await commitAnswerAndAdvance(result.text);
+      return;
+    }
+
+    // ── Silent answer ────────────────────────────────────────────────────
+    if (!silenceRetryUsed) {
+      // First silent answer in this interview — pause and offer the choice
+      setSilentPrompt({
+        questionId: currentQuestion.id,
+        isLast: questionIndex === questions.length - 1,
+      });
+      setAdvancing(false);
+      return;
+    }
+    // Retry chance already used — auto-mark and advance silently
+    await commitAnswerAndAdvance(NO_RESPONSE_MARKER);
+  }
+
+  /** Candidate clicked "Try again" in the silent-answer prompt. Consumes
+   *  the one-shot retry budget and re-arms the recorder for the same
+   *  question. */
+  function handleSilentRetry() {
+    setSilenceRetryUsed(true);
+    setSilentPrompt(null);
+    voicePanelRef.current?.restartListening();
+  }
+
+  /** Candidate clicked "Mark as I don't know" in the silent-answer prompt.
+   *  Stores the explicit answer and advances. Also consumes the retry budget
+   *  (you only get prompted once per interview). */
+  async function handleSilentDontKnow() {
+    setSilenceRetryUsed(true);
+    setSilentPrompt(null);
+    setAdvancing(true);
+    await commitAnswerAndAdvance(DONT_KNOW_MARKER);
   }
 
   async function handleAuth() {
@@ -581,27 +648,98 @@ export default function ApplyPage({ params }: { params: any }) {
                     </div>
                   ) : currentQuestion.type === "one_word" ? (
                     <Input placeholder="Your answer" value={answers[currentQuestion.id] ?? ""} onChange={e => setAnswers(a => ({ ...a, [currentQuestion.id]: e.target.value }))} />
-                  ) : answerMode === "video" && applicationId !== null ? (
-                    <VoiceAnswerPanel
-                      ref={voicePanelRef}
-                      applicationId={applicationId}
-                      questionIndex={questionIndex}
-                      questionId={currentQuestion.id}
-                      stream={camera.stream}
-                      existingAnswer={answers[currentQuestion.id]}
-                      onTranscribed={(text) => setAnswers(a => ({ ...a, [currentQuestion.id]: text }))}
-                      onSwitchToText={
-                        // Switch-to-text only on video_preferred jobs. Hard "video"
-                        // and "candidate_choice" lock the choice once made.
-                        job?.response_type === "video_preferred"
-                          ? () => { setAnswerMode("text"); camera.stop(); }
-                          : undefined
-                      }
-                    />
+                  ) : answerMode === "video"
+                       && applicationId !== null
+                       && ["descriptive", "scenario"].includes(currentQuestion.type) ? (
+                    <div className="space-y-4">
+                      <VoiceAnswerPanel
+                        ref={voicePanelRef}
+                        applicationId={applicationId}
+                        questionIndex={questionIndex}
+                        questionId={currentQuestion.id}
+                        stream={camera.stream}
+                        existingAnswer={answers[currentQuestion.id]}
+                        onTranscribed={(text) => setAnswers(a => ({ ...a, [currentQuestion.id]: text }))}
+                        onSwitchToText={
+                          // Switch-to-text only on video_preferred jobs. Hard "video"
+                          // and "candidate_choice" lock the choice once made.
+                          job?.response_type === "video_preferred"
+                            ? () => { setAnswerMode("text"); camera.stop(); }
+                            : undefined
+                        }
+                      />
+
+                      {silentPrompt && silentPrompt.questionId === currentQuestion.id && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                          <p className="text-sm font-semibold text-amber-900">
+                            We didn&apos;t catch any answer for this question.
+                          </p>
+                          <p className="mt-1 text-xs text-amber-800/80">
+                            What would you like to do? You get this choice
+                            <span className="mx-1 font-semibold">once per interview</span>
+                            — after this, missed questions are recorded as unanswered.
+                          </p>
+                          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                            <Button onClick={handleSilentRetry}>
+                              Try again — re-record this answer
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={handleSilentDontKnow}
+                              disabled={advancing}
+                            >
+                              {advancing ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
+                                </>
+                              ) : (
+                                'Mark as "I don\'t know"'
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : currentQuestion.type === "coding" ? (
+                    // Code editor look — slate-dark background, mono font,
+                    // tab key actually inserts a tab so candidates can write
+                    // real-feeling code instead of a plain textarea.
+                    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-inner">
+                      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/60 px-4 py-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+                        </div>
+                        <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
+                          editor — pseudocode or any language
+                        </span>
+                      </div>
+                      <textarea
+                        className="block min-h-[200px] w-full resize-y bg-slate-900 px-4 py-3 font-mono text-sm leading-6 text-emerald-50 placeholder:text-slate-500 focus:outline-none"
+                        placeholder="// Write your code or pseudocode here..."
+                        spellCheck={false}
+                        value={answers[currentQuestion.id] ?? ""}
+                        onChange={e => setAnswers(a => ({ ...a, [currentQuestion.id]: e.target.value }))}
+                        onKeyDown={e => {
+                          if (e.key === "Tab") {
+                            e.preventDefault();
+                            const ta = e.currentTarget;
+                            const start = ta.selectionStart;
+                            const end = ta.selectionEnd;
+                            const before = ta.value.slice(0, start);
+                            const after = ta.value.slice(end);
+                            const next = before + "  " + after;
+                            ta.value = next;
+                            ta.selectionStart = ta.selectionEnd = start + 2;
+                            setAnswers(a => ({ ...a, [currentQuestion.id]: next }));
+                          }
+                        }}
+                      />
+                    </div>
                   ) : (
                     <Textarea
-                      className={currentQuestion.type === "coding" ? "font-mono text-sm" : ""}
-                      placeholder={currentQuestion.type === "coding" ? "Write your code or pseudocode here..." : "Write your answer here..."}
+                      placeholder="Write your answer here..."
                       rows={5}
                       value={answers[currentQuestion.id] ?? ""}
                       onChange={e => setAnswers(a => ({ ...a, [currentQuestion.id]: e.target.value }))}

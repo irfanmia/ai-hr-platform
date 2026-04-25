@@ -14,6 +14,8 @@ Each question includes:
 
 from jobs.models import Job
 
+from .mcq_generator import fallback_mcq, generate_mcq
+
 # Skills and domains considered relevant per role type
 ROLE_DOMAIN_KEYWORDS = {
     "software": ["python", "django", "react", "typescript", "javascript", "node", "sql", "postgresql",
@@ -41,6 +43,46 @@ IRRELEVANT_DOMAINS = [
     "driving", "first aid", "CPR", "bartending", "real estate license",
     "forex", "crypto trading", "cosmetology", "childcare",
 ]
+
+# Skills that imply the role writes code as a regular activity. If any of
+# these appear in the job's skills list (case-insensitive), or any of
+# CODING_TITLE_HINTS appear in the title, we'll include a coding question.
+# Otherwise the coding slot is replaced with a workflow descriptive Q —
+# asking a UI/UX Designer to "write pseudocode for Figma" is nonsensical.
+CODING_SKILL_KEYWORDS = {
+    "python", "java", "javascript", "typescript", "react", "angular", "vue",
+    "node", "node.js", "next.js", "django", "flask", "fastapi", "express",
+    "rails", "spring", "laravel", "go", "golang", "rust", "c++", "c#",
+    ".net", "scala", "kotlin", "swift", "objective-c",
+    "sql", "postgresql", "postgres", "mysql", "mongodb", "redis", "elasticsearch",
+    "aws", "gcp", "azure", "docker", "kubernetes", "terraform", "ansible",
+    "ci/cd", "jenkins", "github actions", "gitlab ci",
+    "rest api", "graphql", "grpc", "microservices", "serverless",
+    "shell scripting", "bash", "linux administration",
+}
+CODING_TITLE_HINTS = (
+    "engineer", "developer", "programmer", "architect",
+    "data analyst", "data scientist", "data engineer",
+    "ml engineer", "machine learning engineer",
+    "devops", "sre", "site reliability",
+    "backend", "front end", "frontend", "front-end", "full stack", "fullstack",
+    "qa", "test engineer", "automation",
+)
+
+
+def is_coding_role(job: Job) -> bool:
+    """True iff this role's day-to-day work involves writing code.
+
+    Used to decide whether to ask a literal pseudocode question or swap in a
+    workflow-style descriptive question that's appropriate for the role.
+    """
+    title_l = (job.title or "").lower()
+    if any(hint in title_l for hint in CODING_TITLE_HINTS):
+        return True
+    skills_l = [s.strip().lower() for s in (job.skills or [])]
+    if any(skill in CODING_SKILL_KEYWORDS for skill in skills_l):
+        return True
+    return False
 
 
 def is_claim_relevant(claim: str, job: Job) -> bool:
@@ -77,6 +119,94 @@ def is_claim_relevant(claim: str, job: Job) -> bool:
         return True
 
     return False
+
+
+def _build_practical_question(job: Job, primary_skill: str) -> dict:
+    """
+    The "show me you actually do this" question. For coding roles it's a
+    pseudocode prompt; for everyone else it's a workflow walk-through.
+    Asking a UI/UX Designer to write pseudocode for Figma was producing
+    embarrassing prompts — this swap fixes it.
+    """
+    if is_coding_role(job):
+        return {
+            "id": "q_tech_2",
+            "type": "coding",
+            "source": "job_based",
+            "word_count": "5–20 lines of code or pseudocode",
+            "prompt": (
+                f"Write a short code snippet or pseudocode that demonstrates a real use case for "
+                f"{primary_skill} relevant to a {job.title} role. "
+                f"Add brief inline comments explaining your logic and any trade-offs you considered."
+            ),
+            "expected_keywords": [primary_skill.lower(), "function", "return", "comment", "logic"],
+        }
+    # Non-coding roles: practical workflow question instead
+    return {
+        "id": "q_tech_2",
+        "type": "descriptive",
+        "source": "job_based",
+        "word_count": "150–250 words",
+        "prompt": (
+            f"Walk us through your end-to-end workflow when applying {primary_skill} to a real "
+            f"{job.title} project. Cover: how you start, the artefacts or deliverables you produce, "
+            f"how you collaborate with others (designers, PMs, engineers, stakeholders), and how you "
+            f"validate that the outcome was successful. Use a specific recent example you can speak to."
+        ),
+        "expected_keywords": [
+            primary_skill.lower(), "workflow", "collaborate", "deliver", "validate", "outcome",
+        ],
+    }
+
+
+def _build_mcq_question(job: Job, primary_skill: str) -> dict:
+    """
+    Produce the q_mcq_1 entry. Tries Groq first for a context-relevant MCQ;
+    if Groq is unavailable or returns malformed output, slots in a sensible
+    fallback that still references the actual role + skill (no payroll /
+    legal / office-space placeholders).
+
+    The 'expected_keywords' list is filled with the correct option's keywords
+    so the answer evaluator can score MCQ answers consistently with other
+    question types.
+    """
+    generated = generate_mcq(
+        job_title=job.title,
+        job_department=job.department,
+        job_skills=job.skills or [],
+        primary_skill=primary_skill,
+    )
+    if generated is None:
+        fb = fallback_mcq(job.title, primary_skill)
+        return {
+            "id": "q_mcq_1",
+            "type": "mcq",
+            "source": "job_based",
+            "word_count": "Select one option",
+            "prompt": fb["prompt"],
+            "options": fb["options"],
+            # The first option in the fallback is always correct
+            "correct_option": fb["options"][fb["correct_index"]],
+            "expected_keywords": [primary_skill.lower()] + [
+                w.lower() for w in fb["options"][fb["correct_index"]].split()[:6]
+            ],
+        }
+    # Successful Groq generation
+    correct_text = generated.correct_option
+    return {
+        "id": "q_mcq_1",
+        "type": "mcq",
+        "source": "job_based",
+        "word_count": "Select one option",
+        "prompt": generated.prompt,
+        "options": generated.options,
+        "correct_option": correct_text,
+        # Pull a few representative keywords from the correct answer so the
+        # answer evaluator can credit candidates who picked it.
+        "expected_keywords": [primary_skill.lower()] + [
+            w.lower() for w in correct_text.split()[:6]
+        ],
+    }
 
 
 def generate_interview_questions(job: Job, parsed_resume: dict) -> list[dict]:
@@ -145,18 +275,7 @@ def generate_interview_questions(job: Job, parsed_resume: dict) -> list[dict]:
             ),
             "expected_keywords": ["complex", "approach", "decision", "outcome", "impact"],
         },
-        {
-            "id": "q_tech_2",
-            "type": "coding",
-            "source": "job_based",
-            "word_count": "5–20 lines of code or pseudocode",
-            "prompt": (
-                f"Write a short code snippet or pseudocode that demonstrates a real use case for {primary_skill} "
-                f"relevant to a {job.title} role. "
-                f"Add brief inline comments explaining your logic and any trade-offs you considered."
-            ),
-            "expected_keywords": [primary_skill.lower(), "function", "return", "comment", "logic"],
-        },
+        _build_practical_question(job, primary_skill),
         {
             "id": "q_tech_3",
             "type": "descriptive",
@@ -182,23 +301,7 @@ def generate_interview_questions(job: Job, parsed_resume: dict) -> list[dict]:
             ),
             "expected_keywords": ["communicate", "stakeholder", "trade-off", "scope", "prioritize"],
         },
-        {
-            "id": "q_mcq_1",
-            "type": "mcq",
-            "source": "job_based",
-            "word_count": "Select one option",
-            "prompt": (
-                f"In the context of a {job.title} role, which of the following best describes "
-                f"the primary purpose of {primary_skill}?"
-            ),
-            "options": [
-                f"To {['build', 'optimise', 'design', 'manage'][hash(primary_skill) % 4]} scalable and maintainable systems",
-                "To manage company payroll and benefits",
-                "To handle legal contracts and compliance documentation",
-                "To design physical office spaces and layouts",
-            ],
-            "expected_keywords": [primary_skill.lower(), "scalable", "maintainable"],
-        },
+        _build_mcq_question(job, primary_skill),
         {
             "id": "q_exp_1",
             "type": "descriptive",
@@ -218,12 +321,12 @@ def generate_interview_questions(job: Job, parsed_resume: dict) -> list[dict]:
             "source": "behavioral",
             "word_count": "100–150 words",
             "prompt": (
-                f"A critical bug is discovered in production right before a major demo for a {job.department} client. "
-                f"You have 30 minutes. "
-                f"Describe step-by-step exactly what you do — who you contact first, how you assess severity, "
-                f"and whether you fix, roll back, or workaround."
+                f"A critical issue surfaces in your work right before a major deliverable for a "
+                f"{job.department} client. You have 30 minutes before the deadline. "
+                f"Describe step-by-step exactly what you do — who you involve, how you assess severity, "
+                f"and how you decide between a quick fix, postponing the deadline, or escalating."
             ),
-            "expected_keywords": ["assess", "severity", "rollback", "fix", "communicate", "prioritize"],
+            "expected_keywords": ["assess", "severity", "escalate", "communicate", "decide", "prioritize"],
         },
         {
             "id": "q_skill_3",

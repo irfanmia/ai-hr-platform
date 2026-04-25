@@ -178,16 +178,28 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             )
         except TranscriptionError as exc:
             code = str(exc)
+
+            # ── "Silent answer" — return 200 with empty text so the frontend
+            #    can show a friendly retry/I-don't-know prompt instead of an
+            #    error toast. Counts as no-response in scoring downstream.
+            if code in ("empty_audio", "empty_transcription", "audio_too_short"):
+                return response.Response(
+                    {
+                        "text": "",
+                        "duration_ms": 0,
+                        "language": "en",
+                        "model": "silent",
+                        "silent": True,
+                    }
+                )
+
+            # Real errors below — keep the user-facing toast pathway.
             user_messages = {
-                "empty_audio": "No audio captured — try recording again.",
                 "audio_too_large": "That recording was too large. Keep answers under 3 minutes.",
                 "audio_too_long": "That recording was too long. Keep answers under 3 minutes.",
-                "audio_too_short": "Recording was too short. Please give a fuller answer.",
-                "empty_transcription": "We couldn't make out any words — please re-record clearly.",
                 "faster_whisper_not_installed": "Server transcription engine is not installed.",
                 "whisper_inference_error": "Transcription failed on the server — please try again.",
             }
-            # Infrastructure errors → 503, user-input errors → 400
             infra = {"faster_whisper_not_installed", "whisper_inference_error"}
             http_status = (
                 status.HTTP_503_SERVICE_UNAVAILABLE

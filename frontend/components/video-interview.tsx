@@ -164,15 +164,26 @@ export interface VoiceAnswerPanelProps {
   maxSeconds?: number;
 }
 
+export interface StopResult {
+  /** Transcribed text. Empty string when silent. */
+  text: string;
+  /** True when the backend / panel detected no speech in the audio. The
+   *  parent can decide whether to advance, prompt for a retry, or accept
+   *  the answer as "no response". */
+  silent: boolean;
+}
+
 export interface VoiceAnswerPanelHandle {
   /**
-   * Stop the in-flight recording and return the transcribed text.
-   * Caller usually fires this on "Next question". Resolves with the transcript
-   * (already pushed through onTranscribed) or rejects on transcription error.
+   * Stop the in-flight recording. Resolves with { text, silent } once the
+   * server returns. Never rejects on silence — only on hard transcription
+   * failures (5xx, network).
    */
-  stopAndTranscribe: () => Promise<string>;
+  stopAndTranscribe: () => Promise<StopResult>;
   /** True if currently recording or awaiting a transcript. */
   isBusy: () => boolean;
+  /** Re-arm the recorder for the same question (used by parent on "retry"). */
+  restartListening: () => void;
 }
 
 type PanelState =
@@ -196,7 +207,7 @@ export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPa
     /** Promise that resolves when the current onstop+upload settles. Held so
      *  the imperative stopAndTranscribe() can return it. */
     const settleResolverRef = useRef<{
-      resolve: (text: string) => void;
+      resolve: (result: StopResult) => void;
       reject: (err: Error) => void;
     } | null>(null);
 
@@ -248,10 +259,9 @@ export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPa
         settleResolverRef.current = null;
 
         if (blob.size < 1024) {
-          // Treat as empty rather than blocking — candidate may have skipped
+          // Tiny clip — treat as silence; the parent decides whether to prompt.
           setState({ kind: "ready", text: "" });
-          onTranscribed("");
-          if (resolver) resolver.resolve("");
+          if (resolver) resolver.resolve({ text: "", silent: true });
           return;
         }
         setState({ kind: "transcribing" });
@@ -265,10 +275,13 @@ export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPa
             `answer_q${questionIndex + 1}.${ext}`,
             questionIndex,
           );
-          setState({ kind: "ready", text: result.text });
-          onTranscribed(result.text);
-          if (resolver) resolver.resolve(result.text);
+          // Backend now returns 200 with {text:"", silent:true} on no-speech.
+          const isSilent = result.silent === true || !result.text.trim();
+          setState({ kind: "ready", text: result.text || "" });
+          if (!isSilent) onTranscribed(result.text);
+          if (resolver) resolver.resolve({ text: result.text || "", silent: isSilent });
         } catch (err) {
+          // Real infra errors only — silence comes back as 200 above.
           const anyErr = err as { response?: { data?: { message?: string } }; message?: string };
           const msg = anyErr?.response?.data?.message ?? anyErr?.message ?? "Couldn't transcribe answer.";
           setState({ kind: "error", message: msg });
@@ -323,13 +336,20 @@ export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPa
     // ─── Imperative API for parent ────────────────────────────────────────
     useImperativeHandle(ref, () => ({
       isBusy: () => state.kind === "listening" || state.kind === "transcribing" || state.kind === "preparing",
+      restartListening: () => {
+        // Discard whatever happened, start a fresh recording for this question.
+        setState({ kind: "preparing" });
+        setElapsed(0);
+        setTimeout(() => startListening(), 250);
+      },
       stopAndTranscribe: () =>
-        new Promise<string>((resolve, reject) => {
+        new Promise<StopResult>((resolve, reject) => {
           const rec = recorderRef.current;
-          // If we already have a transcript, resolve immediately
-          if (state.kind === "ready") return resolve(state.text);
+          if (state.kind === "ready") {
+            return resolve({ text: state.text, silent: !state.text.trim() });
+          }
           if (state.kind === "error") return reject(new Error(state.message));
-          if (!rec || rec.state === "inactive") return resolve("");
+          if (!rec || rec.state === "inactive") return resolve({ text: "", silent: true });
           settleResolverRef.current = { resolve, reject };
           try { rec.stop(); } catch (e) { reject(e as Error); }
         }),
@@ -452,7 +472,58 @@ export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPa
   },
 );
 
-// ─── Preflight (rewritten — no jargon) ───────────────────────────────────
+// ─── Interview rules — shown in preflight + on demand elsewhere ─────────
+
+/** Shared list of interview rules / expectations, surfaced in the preflight
+ *  before the candidate starts. Kept as its own export so we can reuse it
+ *  for a "rules reminder" tooltip later if needed. */
+export function InterviewRules() {
+  return (
+    <ul className="space-y-2 text-sm text-slate-600">
+      <li className="flex items-start gap-2">
+        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+          1
+        </span>
+        <span>
+          Answer each question on camera, then click
+          <span className="mx-1 font-medium text-slate-800">Next question</span>
+          to move on.
+        </span>
+      </li>
+      <li className="flex items-start gap-2">
+        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+          2
+        </span>
+        <span>
+          Take your time — there&apos;s no countdown. Speak naturally, like a normal interview.
+        </span>
+      </li>
+      <li className="flex items-start gap-2">
+        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+          3
+        </span>
+        <span>
+          If you don&apos;t know an answer, just say
+          <span className="mx-1 font-medium text-slate-800">&ldquo;I don&apos;t know&rdquo;</span>
+          — it&apos;s honest, and scores higher than staying silent.
+        </span>
+      </li>
+      <li className="flex items-start gap-2">
+        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">
+          !
+        </span>
+        <span>
+          If you click <span className="mx-1 font-medium text-slate-800">Next</span> without
+          speaking, we&apos;ll mark the question as unanswered. You get
+          <span className="mx-1 font-semibold text-amber-700">one chance</span>
+          per interview to retry a missed question.
+        </span>
+      </li>
+    </ul>
+  );
+}
+
+// ─── Preflight (rewritten — no jargon, with rules) ───────────────────────
 
 export interface PreflightProps {
   mode: "video" | "video_preferred" | "candidate_choice";
@@ -586,24 +657,32 @@ export function InterviewPreflight({
       )}
 
       {cameraStatus === "ready" && (
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={onConfirmVideo}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-base font-semibold text-white hover:bg-indigo-700"
-          >
-            I&apos;m ready, start the interview
-          </button>
-          {textAllowed && (
+        <>
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-indigo-700">
+              Quick interview rules
+            </p>
+            <InterviewRules />
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
-              onClick={onConfirmText}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
+              onClick={onConfirmVideo}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-base font-semibold text-white hover:bg-indigo-700"
             >
-              Switch to typing
+              I&apos;m ready, start the interview
             </button>
-          )}
-        </div>
+            {textAllowed && (
+              <button
+                type="button"
+                onClick={onConfirmText}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
+              >
+                Switch to typing
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {(cameraStatus === "denied" || cameraStatus === "unsupported") && (

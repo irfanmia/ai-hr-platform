@@ -17,14 +17,61 @@ from statistics import mean
 from applications.models import Application
 
 
+#: Sentinel the frontend uses when a candidate clicked Next without speaking.
+#: Treated as the worst possible response — worse than honestly admitting
+#: they don't know the answer.
+NO_RESPONSE_MARKER = "[no response]"
+
+#: Phrases that indicate the candidate honestly said they didn't know.
+#: Better than silence but still scored low.
+DONT_KNOW_PATTERNS = (
+    "i don't know",
+    "i dont know",
+    "i do not know",
+    "idk",
+    "i'm not sure",
+    "im not sure",
+    "i am not sure",
+    "no idea",
+    "not familiar",
+    "not familiar with",
+    "i haven't",
+    "i havent",
+    "never used",
+    "never worked with",
+)
+
+
+def _is_dont_know_answer(text_lower: str, word_count: int) -> bool:
+    """An answer counts as honest 'I don't know' if it's short AND matches
+    one of the recognised phrases. Longer text usually means they're explaining
+    *what* they don't know, which is a real attempt — score it normally."""
+    if word_count > 12:
+        return False
+    return any(p in text_lower for p in DONT_KNOW_PATTERNS)
+
+
 def _score_answer(answer: str, question_type: str, expected_keywords: list[str]) -> int:
     text = (answer or "").strip()
 
-    if not text:
-        return 0  # No answer = 0
+    # ── Tiered handling for empty / silent / "I don't know" answers ────────
+    # Silent (candidate clicked Next without speaking, panel marked it):
+    #   worst possible score — they had time and chose not to engage.
+    # Empty string (legacy / text-mode skipped):
+    #   same as silent.
+    # Honest "I don't know" / "not sure":
+    #   low but better than silence — rewards honesty.
+    if not text or text == NO_RESPONSE_MARKER:
+        # Silent. Worse than "I don't know".
+        # MCQs are auto-skip-able so they get a slightly higher floor.
+        return 20 if question_type == "mcq" else 15
 
+    text_lower = text.lower().strip()
     word_count = len(text.split())
-    text_lower = text.lower()
+
+    if _is_dont_know_answer(text_lower, word_count):
+        # Honest skip — worse than a real attempt but better than silence.
+        return 35
 
     # Base score for attempting — generous starting point
     base = 55

@@ -199,6 +199,10 @@ export interface TranscriptionResponse {
   duration_ms: number;
   language: string;
   model: string;
+  /** Set to true by the backend when the audio was silent / too short /
+   *  contained no recognisable speech. Frontend treats this as "no answer
+   *  detected, offer retry" rather than an error. */
+  silent?: boolean;
 }
 export async function transcribeAnswer(
   applicationId: number,
