@@ -86,10 +86,15 @@ def is_document_a_resume(pdf_path: str) -> dict:
         content.append({
             "type": "text",
             "text": (
-                "Look at this document carefully. Is this a resume or CV (curriculum vitae)? "
-                "A resume typically contains: person's name, contact info, work experience, education, skills. "
-                "Answer with ONLY a JSON object: "
-                '{"is_resume": true/false, "document_type": "what type of document this actually is", "reason": "one sentence explanation"}'
+                "Look at this document. Is it a job-application document — meaning a "
+                "resume, CV, curriculum vitae, biodata, or career profile? "
+                "All of those count as 'yes'. "
+                "Answer 'no' ONLY if the document is clearly something unrelated to job "
+                "applications — like an invoice, receipt, contract, ID card, certificate, "
+                "academic transcript, photograph, screenshot of a chat, blank page, etc. "
+                "When in doubt, say yes. "
+                "Respond with ONLY a JSON object: "
+                '{"is_resume": true/false, "document_type": "short label", "reason": "one sentence"}'
             )
         })
 
@@ -111,16 +116,37 @@ def is_document_a_resume(pdf_path: str) -> dict:
 
         result = json.loads(raw)
         is_resume = bool(result.get("is_resume", False))
-        doc_type = result.get("document_type", "unknown document")
+        doc_type = (result.get("document_type") or "").strip()
+        doc_type_lower = doc_type.lower()
         reason = result.get("reason", "")
 
+        # Safety net: even if the model said `is_resume: false`, accept the
+        # document if its declared type is plainly a job-application doc.
+        # The model often labels CVs as "CV (curriculum vitae)" then flips
+        # is_resume false because the word literally isn't "resume". Catch
+        # that here and let it through.
+        ACCEPT_ANY_OF = (
+            "resume", "cv", "curriculum vitae", "curriculum-vitae", "cv/resume",
+            "biodata", "bio-data", "career profile", "professional profile",
+            "candidate profile", "work history",
+        )
+        if not is_resume and any(kw in doc_type_lower for kw in ACCEPT_ANY_OF):
+            logger.info(
+                "Vision said is_resume=false but document_type='%s' — accepting as resume",
+                doc_type,
+            )
+            is_resume = True
+
         if not is_resume:
+            # Only reject when the model is clearly confident the document
+            # has nothing to do with job hunting. Use the model's own label.
+            display = doc_type if doc_type else "this kind of document"
             return {
                 "is_resume": False,
                 "reason": (
-                    f"The document you uploaded appears to be a {doc_type}, not a resume. "
-                    f"Please upload your CV or resume. "
-                    f"ATS-friendly format recommended: clean layout, standard fonts, no graphics."
+                    f"This looks like {display}, not a resume or CV. "
+                    f"Please upload your resume or CV in PDF, DOC, or DOCX format. "
+                    f"ATS-friendly layout works best — plain fonts, no graphics."
                 )
             }
         return {"is_resume": True, "reason": ""}
