@@ -18,6 +18,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { PhoneInput } from "@/components/phone-input";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,12 +146,10 @@ export default function DemoPage() {
                     />
                   </Field>
                   <Field label="Phone" required>
-                    <Input
-                      type="tel"
-                      autoComplete="tel"
-                      placeholder="+1 555 123 4567"
+                    <PhoneInput
                       value={form.phone}
-                      onChange={(e) => update("phone", e.target.value)}
+                      onChange={(v) => update("phone", v)}
+                      placeholder="9876543210"
                       required
                     />
                   </Field>
