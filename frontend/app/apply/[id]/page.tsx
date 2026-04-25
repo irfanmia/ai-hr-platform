@@ -15,6 +15,7 @@ import {
   CameraBubble,
   InterviewPreflight,
   VoiceAnswerPanel,
+  type VoiceAnswerPanelHandle,
   useInterviewCamera,
 } from "@/components/video-interview";
 import { generateQuestions, getJob, submitAnswers, submitApplication } from "@/lib/api";
@@ -85,6 +86,11 @@ export default function ApplyPage({ params }: { params: any }) {
   // For text-only jobs we set it directly so the preflight is skipped entirely.
   const [answerMode, setAnswerMode] = useState<AnswerMode | null>(null);
   const [showPreflight, setShowPreflight] = useState(false);
+  // When the candidate clicks "Next", we ask the panel to stop & transcribe.
+  // The advance is awaited so the next question doesn't appear before the
+  // current answer is captured. Loader shows during the (~1-10s) transcribe.
+  const voicePanelRef = useRef<VoiceAnswerPanelHandle | null>(null);
+  const [advancing, setAdvancing] = useState(false);
 
   const [form, setForm] = useState({
     candidate_name: "", email: "", phone: "",
@@ -260,11 +266,36 @@ export default function ApplyPage({ params }: { params: any }) {
 
   async function handleNextQuestion() {
     if (!currentQuestion || !applicationId) return;
+    setAdvancing(true);
+
+    // Collect the answer for this question. For text questions it's already
+    // in `answers`. For video answers we ask the panel to stop + transcribe.
+    let answersToSubmit = answers;
+    const isVoiceQuestion =
+      answerMode === "video" &&
+      ["descriptive", "coding", "scenario"].includes(currentQuestion.type);
+
+    if (isVoiceQuestion && voicePanelRef.current) {
+      try {
+        const text = await voicePanelRef.current.stopAndTranscribe();
+        answersToSubmit = { ...answersToSubmit, [currentQuestion.id]: text };
+      } catch {
+        // Panel surfaces its own error UI; don't advance on transcription failure
+        setAdvancing(false);
+        return;
+      }
+    }
+
     if (questionIndex === questions.length - 1) {
-      await submitAnswers(applicationId, answers);
-      setStep(5);
+      try {
+        await submitAnswers(applicationId, answersToSubmit);
+        setStep(5);
+      } finally {
+        setAdvancing(false);
+      }
       return;
     }
+    setAdvancing(false);
     startTransition(() => setQuestionIndex((v) => v + 1));
   }
 
@@ -513,12 +544,13 @@ export default function ApplyPage({ params }: { params: any }) {
               </div>
             )}
 
-            {/* Preflight (consent + camera permission) for video-capable jobs */}
+            {/* Preflight — shown once before question 1 on video-capable jobs */}
             {step === 4 && !questionsLoading && showPreflight && answerMode === null && job && (
               <InterviewPreflight
                 mode={(job.response_type ?? "text") as Exclude<ResponseType, "text">}
                 cameraStatus={camera.status}
                 cameraError={camera.error}
+                stream={camera.stream}
                 onRequestCamera={() => camera.request()}
                 onConfirmVideo={() => { setAnswerMode("video"); setShowPreflight(false); }}
                 onConfirmText={() => { setAnswerMode("text"); setShowPreflight(false); camera.stop(); }}
@@ -551,6 +583,7 @@ export default function ApplyPage({ params }: { params: any }) {
                     <Input placeholder="Your answer" value={answers[currentQuestion.id] ?? ""} onChange={e => setAnswers(a => ({ ...a, [currentQuestion.id]: e.target.value }))} />
                   ) : answerMode === "video" && applicationId !== null ? (
                     <VoiceAnswerPanel
+                      ref={voicePanelRef}
                       applicationId={applicationId}
                       questionIndex={questionIndex}
                       questionId={currentQuestion.id}
@@ -558,9 +591,8 @@ export default function ApplyPage({ params }: { params: any }) {
                       existingAnswer={answers[currentQuestion.id]}
                       onTranscribed={(text) => setAnswers(a => ({ ...a, [currentQuestion.id]: text }))}
                       onSwitchToText={
-                        // Switch-to-text only available on video_preferred jobs.
-                        // Hard "video" jobs lock to video; "candidate_choice" locks
-                        // after the preflight pick.
+                        // Switch-to-text only on video_preferred jobs. Hard "video"
+                        // and "candidate_choice" lock the choice once made.
                         job?.response_type === "video_preferred"
                           ? () => { setAnswerMode("text"); camera.stop(); }
                           : undefined
@@ -576,9 +608,30 @@ export default function ApplyPage({ params }: { params: any }) {
                     />
                   )}
                 </div>
-                <Button onClick={handleNextQuestion} disabled={!answers[currentQuestion.id] || isPending}>
-                  {questionIndex === questions.length - 1 ? "Submit Interview ✓" : "Next Question →"}
-                </Button>
+                {(() => {
+                  // For voice questions the panel auto-records, so the Next
+                  // button is always enabled (clicking it triggers the stop
+                  // + transcribe). For text questions, gate on answer presence.
+                  const isVoiceQ =
+                    answerMode === "video" &&
+                    ["descriptive", "coding", "scenario"].includes(currentQuestion.type);
+                  const disabled = advancing || isPending || (!isVoiceQ && !answers[currentQuestion.id]);
+                  const isLast = questionIndex === questions.length - 1;
+                  return (
+                    <Button onClick={handleNextQuestion} disabled={disabled}>
+                      {advancing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {isLast ? "Submitting…" : "Saving answer…"}
+                        </>
+                      ) : isLast ? (
+                        "Submit Interview ✓"
+                      ) : (
+                        "Next Question →"
+                      )}
+                    </Button>
+                  );
+                })()}
               </div>
             )}
 

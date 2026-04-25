@@ -1,33 +1,43 @@
 "use client";
 
 /**
- * Video Interview — camera-on, audio-only recording, server-side transcription.
+ * Video Interview — continuous flow.
  * ---------------------------------------------------------------------------
- * Exposes three pieces:
- *   - useInterviewCamera():  lifecycle hook for the camera+mic MediaStream
- *   - <CameraBubble/>:        sticky self-preview bubble (bottom-right)
- *   - <VoiceAnswerPanel/>:    record / transcribe / confirm UI per question
+ * Exports:
+ *   - useInterviewCamera():   getUserMedia lifecycle hook (lives across questions)
+ *   - <CameraBubble/>:         sticky bottom-right self-view bubble
+ *   - <VoiceAnswerPanel/>:     listens in the background while a question is
+ *                              shown. Parent calls .stopAndTranscribe() via
+ *                              ref when the candidate clicks "Next question".
+ *                              No mic-button chrome shown to the candidate.
+ *   - <InterviewPreflight/>:   "Get ready" screen — friendly, no jargon.
  *
- * Design notes:
- *  - We request BOTH video and audio via getUserMedia because we want the
- *    candidate to see themselves on camera (interview feel). But we only
- *    put the *audio track* into the MediaRecorder — the video stream is
- *    rendered locally and otherwise discarded. Nothing video-related is
- *    ever uploaded.
- *  - The stream is owned by the apply page (via useInterviewCamera) and
- *    reused across all questions, so the candidate is prompted for
- *    permission exactly once.
- *  - No transcript editing. Candidate can re-record if Whisper mis-hears.
- *  - Safari only supports audio/mp4 for MediaRecorder; Chrome/Firefox
- *    prefer audio/webm;codecs=opus. We pick the best supported.
+ * Privacy invariants kept identical to before — only audio leaves the browser,
+ * audio is deleted server-side after transcription. Just nothing about that
+ * is surfaced to the candidate; the experience reads as a normal video
+ * interview.
  */
 
-import { Loader2, Mic, RefreshCw, Video, VideoOff } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Loader2,
+  Mic,
+  RefreshCw,
+  Video,
+  VideoOff,
+} from "lucide-react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { transcribeAnswer } from "@/lib/api";
 
-// ─── Hook ────────────────────────────────────────────────────────────────
+// ─── Camera hook ──────────────────────────────────────────────────────────
 
 export interface CameraState {
   stream: MediaStream | null;
@@ -37,9 +47,6 @@ export interface CameraState {
   stop: () => void;
 }
 
-/** Lifecycle hook for the interview camera+mic. Caller calls `request()`
- * explicitly after the candidate consents (never on mount — browsers treat
- * unprompted getUserMedia as hostile). */
 export function useInterviewCamera(): CameraState {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +54,7 @@ export function useInterviewCamera(): CameraState {
   const streamRef = useRef<MediaStream | null>(null);
 
   const request = useCallback(async () => {
-    if (streamRef.current) return; // already granted
+    if (streamRef.current) return;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       setStatus("unsupported");
       setError("Your browser does not support camera recording. Please use Chrome, Firefox, or Safari.");
@@ -57,16 +64,8 @@ export function useInterviewCamera(): CameraState {
     setError(null);
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: {
-          width: { ideal: 480 },
-          height: { ideal: 360 },
-          facingMode: "user",
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: "user" },
       });
       streamRef.current = s;
       setStream(s);
@@ -88,24 +87,19 @@ export function useInterviewCamera(): CameraState {
 
   const stop = useCallback(() => {
     const s = streamRef.current;
-    if (s) {
-      s.getTracks().forEach((t) => t.stop());
-    }
+    if (s) s.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setStream(null);
     setStatus("idle");
   }, []);
 
-  // Stop on unmount — candidate shouldn't have camera on after leaving step 4
   useEffect(() => () => stop(), [stop]);
 
   return { stream, error, status, request, stop };
 }
 
-// ─── Self-view bubble ─────────────────────────────────────────────────────
+// ─── Self-view bubble ────────────────────────────────────────────────────
 
-/** Sticky bottom-right self-preview. Mirrored (like Zoom). Shows a REC
- * pulse when `recording` is true. */
 export function CameraBubble({
   stream,
   recording,
@@ -126,7 +120,7 @@ export function CameraBubble({
   return (
     <div
       className="fixed bottom-6 right-6 z-50 w-44 overflow-hidden rounded-2xl border border-white/30 bg-slate-900 shadow-2xl shadow-slate-900/50 sm:w-56"
-      aria-label="Self-view — your camera preview"
+      aria-label="Self-view"
     >
       <video
         ref={videoRef}
@@ -142,7 +136,7 @@ export function CameraBubble({
             <span className="absolute inset-0 animate-ping rounded-full bg-red-400 opacity-75" />
             <span className="relative h-2 w-2 rounded-full bg-white" />
           </span>
-          Rec
+          Live
         </span>
       ) : (
         <span className="pointer-events-none absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur">
@@ -153,363 +147,413 @@ export function CameraBubble({
   );
 }
 
-// ─── Voice answer panel ───────────────────────────────────────────────────
+// ─── Voice answer panel ──────────────────────────────────────────────────
 
 export interface VoiceAnswerPanelProps {
   applicationId: number;
   questionIndex: number;
-  /** Passing the questionId lets us reset panel state when the candidate
-   * moves to the next question. */
   questionId: string;
   stream: MediaStream | null;
-  /** Called with the accepted transcript when candidate clicks "Use this answer". */
+  /** Called when this question's transcript settles (success or after re-record). */
   onTranscribed: (text: string) => void;
-  /** Optional: if job mode is `video_preferred`, render a "Switch to text" button. */
+  /** Optional escape hatch for video_preferred jobs. */
   onSwitchToText?: () => void;
-  /** The transcript currently stored for this question (so if the candidate
-   * navigates back we show it). */
+  /** Pre-existing answer (if candidate is navigating back, currently unused). */
   existingAnswer?: string;
-  /** Max seconds per answer — clip is auto-stopped at this duration. */
+  /** Cap each clip to keep uploads small. Default 3 min. */
   maxSeconds?: number;
 }
 
-type PanelState =
-  | { kind: "idle" }
-  | { kind: "recording"; startedAt: number }
-  | { kind: "transcribing" }
-  | { kind: "transcribed"; text: string }
-  | { kind: "error"; message: string };
-
-export function VoiceAnswerPanel({
-  applicationId,
-  questionIndex,
-  questionId,
-  stream,
-  onTranscribed,
-  onSwitchToText,
-  existingAnswer,
-  maxSeconds = 180,
-}: VoiceAnswerPanelProps) {
-  const [state, setState] = useState<PanelState>(
-    existingAnswer ? { kind: "transcribed", text: existingAnswer } : { kind: "idle" }
-  );
-  const [elapsed, setElapsed] = useState(0);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const mimeRef = useRef<string>("audio/webm");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Reset panel state when the question changes
-  useEffect(() => {
-    setState(existingAnswer ? { kind: "transcribed", text: existingAnswer } : { kind: "idle" });
-    setElapsed(0);
-    chunksRef.current = [];
-    // Stop any active recorder lingering from a prior question
-    const rec = recorderRef.current;
-    if (rec && rec.state !== "inactive") {
-      try { rec.stop(); } catch { /* noop */ }
-    }
-    recorderRef.current = null;
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionId]);
-
-  // Teardown on unmount
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      const rec = recorderRef.current;
-      if (rec && rec.state !== "inactive") {
-        try { rec.stop(); } catch { /* noop */ }
-      }
-    },
-    []
-  );
-
-  /** Build a MediaRecorder over the AUDIO TRACK only — we never record video. */
-  const buildRecorder = useCallback((audioOnlyStream: MediaStream) => {
-    // Prefer webm/opus (Chrome, Firefox), fall back to audio/mp4 (Safari)
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/mp4",
-      "audio/ogg;codecs=opus",
-    ];
-    const supported = candidates.find(
-      (m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)
-    );
-    mimeRef.current = supported ?? "";
-    return new MediaRecorder(
-      audioOnlyStream,
-      supported ? { mimeType: supported, audioBitsPerSecond: 32_000 } : undefined
-    );
-  }, []);
-
-  const startRecording = useCallback(() => {
-    if (!stream) {
-      setState({ kind: "error", message: "Camera not ready yet." });
-      return;
-    }
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      setState({ kind: "error", message: "No microphone detected." });
-      return;
-    }
-    // Build a new stream containing only the audio track
-    const audioOnly = new MediaStream([audioTracks[0]]);
-    const recorder = buildRecorder(audioOnly);
-    chunksRef.current = [];
-
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    recorder.onerror = (e) => {
-      const msg = (e as unknown as { error?: { message?: string } }).error?.message ?? "Recorder error";
-      setState({ kind: "error", message: msg });
-    };
-    recorder.onstop = async () => {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-      const blob = new Blob(chunksRef.current, { type: mimeRef.current || "audio/webm" });
-      chunksRef.current = [];
-      if (blob.size < 1024) {
-        setState({ kind: "error", message: "That recording was too short. Try again." });
-        return;
-      }
-      setState({ kind: "transcribing" });
-      try {
-        const ext = (mimeRef.current || "").includes("mp4") ? "mp4"
-                  : (mimeRef.current || "").includes("ogg") ? "ogg"
-                  : "webm";
-        const result = await transcribeAnswer(
-          applicationId,
-          blob,
-          `answer_q${questionIndex + 1}.${ext}`,
-          questionIndex,
-        );
-        setState({ kind: "transcribed", text: result.text });
-      } catch (err) {
-        const anyErr = err as { response?: { data?: { message?: string } }; message?: string };
-        const msg = anyErr?.response?.data?.message ?? anyErr?.message ?? "Transcription failed.";
-        setState({ kind: "error", message: msg });
-      }
-    };
-
-    recorder.start(250); // flush chunks every 250ms so onstop has data
-    recorderRef.current = recorder;
-    setState({ kind: "recording", startedAt: Date.now() });
-    setElapsed(0);
-    timerRef.current = setInterval(() => {
-      setElapsed((prev) => {
-        const next = prev + 1;
-        if (next >= maxSeconds) {
-          // Auto-stop at max duration
-          try { recorder.stop(); } catch { /* noop */ }
-        }
-        return next;
-      });
-    }, 1000);
-  }, [applicationId, buildRecorder, maxSeconds, questionIndex, stream]);
-
-  const stopRecording = useCallback(() => {
-    const rec = recorderRef.current;
-    if (!rec) return;
-    if (rec.state !== "inactive") {
-      try { rec.stop(); } catch { /* noop */ }
-    }
-  }, []);
-
-  const retry = useCallback(() => {
-    setState({ kind: "idle" });
-    setElapsed(0);
-    chunksRef.current = [];
-  }, []);
-
-  // Ensure parent knows the accepted answer the moment "transcribed" state is entered
-  useEffect(() => {
-    if (state.kind === "transcribed") {
-      onTranscribed(state.text);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
-
-  const minsSecs = (s: number) =>
-    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      {/* Instructions */}
-      <div className="mb-4 flex items-start gap-3">
-        <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-indigo-100 text-indigo-600">
-          <Mic className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-slate-800">Record your answer</p>
-          <p className="text-xs text-slate-500">
-            Your camera is on for the interview feel. Only your audio is recorded, transcribed on
-            our server, then deleted. Max {Math.floor(maxSeconds / 60)} minutes.
-          </p>
-        </div>
-      </div>
-
-      {/* Core control */}
-      {state.kind === "idle" && (
-        <div className="flex flex-col items-center gap-4">
-          <button
-            type="button"
-            onClick={startRecording}
-            disabled={!stream}
-            className="group relative grid h-20 w-20 place-items-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition-all hover:scale-105 hover:bg-indigo-700 disabled:bg-slate-300 disabled:shadow-none"
-            aria-label="Start recording"
-          >
-            <Mic className="h-8 w-8" />
-          </button>
-          <p className="text-xs text-slate-500">Click to start recording</p>
-        </div>
-      )}
-
-      {state.kind === "recording" && (
-        <div className="flex flex-col items-center gap-4">
-          <button
-            type="button"
-            onClick={stopRecording}
-            className="relative grid h-20 w-20 place-items-center rounded-full bg-red-600 text-white shadow-lg shadow-red-200 transition-all hover:scale-105 hover:bg-red-700"
-            aria-label="Stop recording"
-          >
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-400 opacity-40" />
-            <span className="relative h-6 w-6 rounded-sm bg-white" />
-          </button>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-red-600">Recording… {minsSecs(elapsed)}</p>
-            <p className="text-xs text-slate-500">Click the square to stop</p>
-          </div>
-        </div>
-      )}
-
-      {state.kind === "transcribing" && (
-        <div className="flex flex-col items-center gap-3 py-4">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-          <p className="text-sm font-medium text-slate-700">Transcribing your answer…</p>
-          <p className="text-xs text-slate-500">Running Whisper on our server, this usually takes a few seconds.</p>
-        </div>
-      )}
-
-      {state.kind === "transcribed" && (
-        <div className="space-y-4">
-          <div className="rounded-xl bg-slate-50 p-4">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Your answer (transcribed)</p>
-            <p className="whitespace-pre-wrap text-sm text-slate-800">{state.text}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={retry}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-indigo-400 hover:text-indigo-600"
-            >
-              <RefreshCw className="h-4 w-4" /> Re-record
-            </button>
-            {onSwitchToText && (
-              <button
-                type="button"
-                onClick={onSwitchToText}
-                className="text-sm text-slate-500 hover:text-indigo-600 hover:underline"
-              >
-                Switch to text mode
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-slate-400">
-            Transcripts are final — no typing edits. If a word came out wrong, re-record your answer.
-          </p>
-        </div>
-      )}
-
-      {state.kind === "error" && (
-        <div className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-700">{state.message}</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={retry}
-              className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-            >
-              <RefreshCw className="h-4 w-4" /> Try again
-            </button>
-            {onSwitchToText && (
-              <button
-                type="button"
-                onClick={onSwitchToText}
-                className="text-sm text-slate-600 hover:text-indigo-600 hover:underline"
-              >
-                Switch to text mode
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+export interface VoiceAnswerPanelHandle {
+  /**
+   * Stop the in-flight recording and return the transcribed text.
+   * Caller usually fires this on "Next question". Resolves with the transcript
+   * (already pushed through onTranscribed) or rejects on transcription error.
+   */
+  stopAndTranscribe: () => Promise<string>;
+  /** True if currently recording or awaiting a transcript. */
+  isBusy: () => boolean;
 }
 
-// ─── Consent / preflight screen ───────────────────────────────────────────
+type PanelState =
+  | { kind: "preparing" }                 // brief moment before recording starts
+  | { kind: "listening"; startedAt: number }
+  | { kind: "transcribing" }
+  | { kind: "ready"; text: string }       // transcript has settled, candidate can move on
+  | { kind: "error"; message: string };
+
+export const VoiceAnswerPanel = forwardRef<VoiceAnswerPanelHandle, VoiceAnswerPanelProps>(
+  function VoiceAnswerPanel(
+    { applicationId, questionIndex, questionId, stream, onTranscribed, onSwitchToText, maxSeconds = 180 },
+    ref,
+  ) {
+    const [state, setState] = useState<PanelState>({ kind: "preparing" });
+    const [elapsed, setElapsed] = useState(0);
+    const recorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<BlobPart[]>([]);
+    const mimeRef = useRef<string>("audio/webm");
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    /** Promise that resolves when the current onstop+upload settles. Held so
+     *  the imperative stopAndTranscribe() can return it. */
+    const settleResolverRef = useRef<{
+      resolve: (text: string) => void;
+      reject: (err: Error) => void;
+    } | null>(null);
+
+    // ─── Build a MediaRecorder over only the audio track ───────────────────
+    const buildRecorder = useCallback((audioStream: MediaStream) => {
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      const supported = candidates.find(
+        (m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m),
+      );
+      mimeRef.current = supported ?? "";
+      return new MediaRecorder(
+        audioStream,
+        supported ? { mimeType: supported, audioBitsPerSecond: 32_000 } : undefined,
+      );
+    }, []);
+
+    // ─── Internal start ────────────────────────────────────────────────────
+    const startListening = useCallback(() => {
+      if (!stream) return;
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        setState({ kind: "error", message: "Microphone unavailable." });
+        return;
+      }
+      const audioOnly = new MediaStream([audioTracks[0]]);
+      const recorder = buildRecorder(audioOnly);
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onerror = (e) => {
+        const msg = (e as unknown as { error?: { message?: string } }).error?.message ?? "Recording error";
+        const resolver = settleResolverRef.current;
+        settleResolverRef.current = null;
+        setState({ kind: "error", message: msg });
+        if (resolver) resolver.reject(new Error(msg));
+      };
+      recorder.onstop = async () => {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        const blob = new Blob(chunksRef.current, { type: mimeRef.current || "audio/webm" });
+        chunksRef.current = [];
+        const resolver = settleResolverRef.current;
+        settleResolverRef.current = null;
+
+        if (blob.size < 1024) {
+          // Treat as empty rather than blocking — candidate may have skipped
+          setState({ kind: "ready", text: "" });
+          onTranscribed("");
+          if (resolver) resolver.resolve("");
+          return;
+        }
+        setState({ kind: "transcribing" });
+        try {
+          const ext = (mimeRef.current || "").includes("mp4") ? "mp4"
+                    : (mimeRef.current || "").includes("ogg") ? "ogg"
+                    : "webm";
+          const result = await transcribeAnswer(
+            applicationId,
+            blob,
+            `answer_q${questionIndex + 1}.${ext}`,
+            questionIndex,
+          );
+          setState({ kind: "ready", text: result.text });
+          onTranscribed(result.text);
+          if (resolver) resolver.resolve(result.text);
+        } catch (err) {
+          const anyErr = err as { response?: { data?: { message?: string } }; message?: string };
+          const msg = anyErr?.response?.data?.message ?? anyErr?.message ?? "Couldn't transcribe answer.";
+          setState({ kind: "error", message: msg });
+          if (resolver) resolver.reject(new Error(msg));
+        }
+      };
+
+      recorder.start(250);
+      recorderRef.current = recorder;
+      setState({ kind: "listening", startedAt: Date.now() });
+      setElapsed(0);
+      timerRef.current = setInterval(() => {
+        setElapsed((prev) => {
+          const next = prev + 1;
+          if (next >= maxSeconds) {
+            try { recorder.stop(); } catch { /* noop */ }
+          }
+          return next;
+        });
+      }, 1000);
+    }, [stream, buildRecorder, applicationId, questionIndex, onTranscribed, maxSeconds]);
+
+    // ─── Auto-start when the panel is shown for a question ────────────────
+    // Small delay so the candidate has time to read the question before mic
+    // engages, and so any prior recorder cleanup completes cleanly.
+    useEffect(() => {
+      setState({ kind: "preparing" });
+      setElapsed(0);
+      const stale = recorderRef.current;
+      if (stale && stale.state !== "inactive") {
+        try { stale.stop(); } catch { /* noop */ }
+      }
+      recorderRef.current = null;
+      const t = setTimeout(() => startListening(), 600);
+      return () => clearTimeout(t);
+      // intentionally only re-run when the question changes (not on every render)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [questionId]);
+
+    // ─── Teardown on unmount ──────────────────────────────────────────────
+    useEffect(
+      () => () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        const rec = recorderRef.current;
+        if (rec && rec.state !== "inactive") {
+          try { rec.stop(); } catch { /* noop */ }
+        }
+      },
+      [],
+    );
+
+    // ─── Imperative API for parent ────────────────────────────────────────
+    useImperativeHandle(ref, () => ({
+      isBusy: () => state.kind === "listening" || state.kind === "transcribing" || state.kind === "preparing",
+      stopAndTranscribe: () =>
+        new Promise<string>((resolve, reject) => {
+          const rec = recorderRef.current;
+          // If we already have a transcript, resolve immediately
+          if (state.kind === "ready") return resolve(state.text);
+          if (state.kind === "error") return reject(new Error(state.message));
+          if (!rec || rec.state === "inactive") return resolve("");
+          settleResolverRef.current = { resolve, reject };
+          try { rec.stop(); } catch (e) { reject(e as Error); }
+        }),
+    }));
+
+    // ─── Re-record (small subtle action) ──────────────────────────────────
+    const handleReRecord = useCallback(() => {
+      const rec = recorderRef.current;
+      if (rec && rec.state !== "inactive") {
+        // Ignore the in-flight result; we'll start fresh
+        settleResolverRef.current = null;
+        try { rec.stop(); } catch { /* noop */ }
+      }
+      // Brief gap then restart
+      setState({ kind: "preparing" });
+      setElapsed(0);
+      setTimeout(() => startListening(), 250);
+    }, [startListening]);
+
+    const minsSecs = (s: number) =>
+      `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+    // ─── UI ───────────────────────────────────────────────────────────────
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        {/* Listening / preparing — friendly, no jargon */}
+        {(state.kind === "listening" || state.kind === "preparing") && (
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span
+                className={`relative grid h-10 w-10 place-items-center rounded-full ${
+                  state.kind === "listening"
+                    ? "bg-indigo-100 text-indigo-600"
+                    : "bg-slate-100 text-slate-400"
+                }`}
+                aria-hidden="true"
+              >
+                <Mic className="h-5 w-5" />
+                {state.kind === "listening" && (
+                  <span className="absolute inset-0 animate-ping rounded-full bg-indigo-400/30" />
+                )}
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">
+                  {state.kind === "listening" ? "Listening…" : "Getting ready…"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Take your time. When you&apos;re done, click{" "}
+                  <span className="font-medium text-slate-700">Next question</span>.
+                </p>
+              </div>
+            </div>
+            {state.kind === "listening" && (
+              <span className="font-mono text-sm text-slate-500" aria-live="polite">
+                {minsSecs(elapsed)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Transcribing — a beat between Next and the next question loading */}
+        {state.kind === "transcribing" && (
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
+            <p className="text-sm text-slate-600">Saving your answer…</p>
+          </div>
+        )}
+
+        {/* Ready — nothing chrome-heavy. Parent advances the question. */}
+        {state.kind === "ready" && (
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-emerald-600">
+              <Mic className="h-4 w-4" />
+            </span>
+            <p className="text-sm text-slate-600">
+              Got your answer. Ready for the next question whenever you are.
+            </p>
+          </div>
+        )}
+
+        {/* Error — surfaced inline, candidate can retry the same question */}
+        {state.kind === "error" && (
+          <div className="space-y-3 rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-medium text-red-700">{state.message}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleReRecord}
+                className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                <RefreshCw className="h-4 w-4" /> Try again
+              </button>
+              {onSwitchToText && (
+                <button
+                  type="button"
+                  onClick={onSwitchToText}
+                  className="text-sm text-slate-600 hover:text-indigo-600 hover:underline"
+                >
+                  Switch to text instead
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Subtle re-record link — only when we're actively recording or just done */}
+        {(state.kind === "listening" || state.kind === "ready") && (
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={handleReRecord}
+              className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600"
+            >
+              <RefreshCw className="h-3 w-3" /> Re-record this answer
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
+// ─── Preflight (rewritten — no jargon) ───────────────────────────────────
 
 export interface PreflightProps {
   mode: "video" | "video_preferred" | "candidate_choice";
   cameraStatus: CameraState["status"];
   cameraError: string | null;
+  stream: MediaStream | null;
   onRequestCamera: () => void;
   onConfirmVideo: () => void;
   onConfirmText: () => void;
 }
 
-/** Shown once before the first question when the job is video-capable.
- * Explains what happens, asks for camera permission, lets the candidate
- * pick between video and text when allowed. */
 export function InterviewPreflight({
   mode,
   cameraStatus,
   cameraError,
+  stream,
   onRequestCamera,
   onConfirmVideo,
   onConfirmText,
 }: PreflightProps) {
   const textAllowed = mode !== "video";
-  const cameraReady = cameraStatus === "ready";
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  // For candidate_choice mode, the picker reads more naturally as two cards
+  // up-front, before any camera prompt.
+  if (mode === "candidate_choice" && cameraStatus !== "ready" && cameraStatus !== "requesting") {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-2xl font-semibold text-slate-900">How would you like to interview?</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Pick one — your choice is set for the whole interview.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onRequestCamera}
+            className="rounded-2xl border-2 border-indigo-200 bg-white p-5 text-left transition hover:border-indigo-400 hover:shadow-md"
+          >
+            <div className="mb-2 flex items-center gap-2 text-indigo-700">
+              <Video className="h-5 w-5" /> <span className="font-semibold">Video interview</span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Answer on camera, like a normal interview. Recommended.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={onConfirmText}
+            className="rounded-2xl border-2 border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 hover:shadow-md"
+          >
+            <div className="mb-2 flex items-center gap-2 text-slate-700">
+              <VideoOff className="h-5 w-5" /> <span className="font-semibold">Text interview</span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Type your answers — no camera or microphone needed.
+            </p>
+          </button>
+        </div>
+        {cameraError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {cameraError}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-2xl font-semibold text-slate-900">Ready your interview</h3>
+        <h3 className="text-2xl font-semibold text-slate-900">Get ready for your video interview</h3>
         <p className="mt-1 text-sm text-slate-500">
-          This role uses a video interview format. Only your audio is recorded and transcribed —
-          no video is ever stored.
+          We&apos;ll ask you a few questions. Answer each one on camera, then click
+          <span className="mx-1 font-medium text-slate-700">Next question</span>
+          to move on. Take your time.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-          <div className="mb-2 flex items-center gap-2 text-emerald-700">
-            <Video className="h-5 w-5" /> <span className="font-semibold">Video mode</span>
-          </div>
-          <ul className="space-y-1.5 text-xs text-emerald-800/80">
-            <li>• Camera on — you see yourself in the corner as proof of recording</li>
-            <li>• We record your audio only; the video stream is never uploaded</li>
-            <li>• Your voice is transcribed server-side and used as your answer</li>
-            <li>• Transcripts are final (no typing) but you can re-record</li>
-          </ul>
-        </div>
-        {textAllowed && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-2 flex items-center gap-2 text-slate-700">
-              <VideoOff className="h-5 w-5" /> <span className="font-semibold">Text mode</span>
-            </div>
-            <ul className="space-y-1.5 text-xs text-slate-500">
-              <li>• Classic text answers — no camera, no microphone</li>
-              <li>• Useful if your connection or environment isn&apos;t video-friendly</li>
-              <li>• Available because this role allows it</li>
-            </ul>
+      {/* Big preview while we wait for the candidate to confirm */}
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-900">
+        {stream ? (
+          <video
+            ref={videoRef}
+            className="block aspect-video w-full object-cover"
+            style={{ transform: "scaleX(-1)" }}
+            autoPlay
+            muted
+            playsInline
+          />
+        ) : (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 text-slate-400">
+            <Video className="h-10 w-10" />
+            <p className="text-sm">Camera preview will appear here</p>
           </div>
         )}
       </div>
@@ -521,15 +565,15 @@ export function InterviewPreflight({
             onClick={onRequestCamera}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
           >
-            <Video className="h-4 w-4" /> Enable camera & microphone
+            <Video className="h-4 w-4" /> Turn on camera
           </button>
           {textAllowed && (
             <button
               type="button"
               onClick={onConfirmText}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-indigo-400 hover:text-indigo-600"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:border-indigo-400 hover:text-indigo-600"
             >
-              <VideoOff className="h-4 w-4" /> Use text mode
+              <VideoOff className="h-4 w-4" /> Type my answers instead
             </button>
           )}
         </div>
@@ -537,31 +581,28 @@ export function InterviewPreflight({
 
       {cameraStatus === "requesting" && (
         <div className="flex items-center gap-2 text-sm text-slate-600">
-          <Loader2 className="h-4 w-4 animate-spin" /> Waiting for your permission…
+          <Loader2 className="h-4 w-4 animate-spin" /> Waiting for camera permission…
         </div>
       )}
 
       {cameraStatus === "ready" && (
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-emerald-600">✓ Camera and microphone ready</p>
-          <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={onConfirmVideo}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-base font-semibold text-white hover:bg-indigo-700"
+          >
+            I&apos;m ready, start the interview
+          </button>
+          {textAllowed && (
             <button
               type="button"
-              onClick={onConfirmVideo}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700"
+              onClick={onConfirmText}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
             >
-              <Video className="h-4 w-4" /> Start video interview
+              Switch to typing
             </button>
-            {textAllowed && (
-              <button
-                type="button"
-                onClick={onConfirmText}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
-              >
-                Actually, use text mode
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
 
@@ -586,12 +627,11 @@ export function InterviewPreflight({
                 onClick={onConfirmText}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:border-indigo-400"
               >
-                Use text mode instead
+                Type my answers instead
               </button>
             ) : (
               <p className="text-xs text-red-600">
-                This role requires video responses. Please grant camera access to continue, or
-                contact the recruiter.
+                This role requires a video interview. Please grant camera access to continue.
               </p>
             )}
           </div>
