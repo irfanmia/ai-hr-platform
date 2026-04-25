@@ -133,46 +133,56 @@ def notify_team(req: DemoRequest) -> bool:
 # ─── Auto-reply to enquirer ───────────────────────────────────────────────
 
 def _autoreply_subject(req: DemoRequest) -> str:
-    return "Thanks for reaching out — HireParrot demo"
+    return "We've received your demo request — HireParrot"
 
 
 def _autoreply_text(req: DemoRequest) -> str:
+    first = req.name.split()[0] if req.name else "there"
     return (
-        f"Hi {req.name.split()[0] if req.name else 'there'},\n"
+        f"Hi {first},\n"
         f"\n"
-        f"Thanks for requesting a HireParrot demo for {req.company}. We've "
-        f"received your details and someone from our team will reach out within "
-        f"one business day to set up a 30-minute walkthrough.\n"
+        f"We've received your demo request for {req.company}. Someone from "
+        f"our team will contact you soon at {req.email} to schedule a "
+        f"30-minute walkthrough.\n"
         f"\n"
-        f"In the meantime, feel free to explore the platform at "
-        f"https://hireparrot.com — and reply to this email if you have any "
-        f"questions.\n"
+        f"If you have any questions in the meantime, just reply to this "
+        f"thread and it'll reach hello@hireparrot.com.\n"
         f"\n"
         f"— Team HireParrot\n"
-        f"hello@hireparrot.com\n"
+        f"hello@hireparrot.com · https://hireparrot.com\n"
+        f"\n"
+        f"---\n"
+        f"This is an automated confirmation. Please do not reply directly to\n"
+        f"noreply@hireparrot.com — it isn't monitored.\n"
     )
 
 
 def _autoreply_html(req: DemoRequest) -> str:
-    first = (req.name.split()[0] if req.name else "there")
+    first = req.name.split()[0] if req.name else "there"
     return (
         '<div style="font-family:Mulish,Arial,sans-serif;font-size:15px;color:#222;'
         'max-width:560px;line-height:1.65;">'
         f'<p style="margin:0 0 14px;">Hi {_esc(first)},</p>'
         '<p style="margin:0 0 14px;">'
-        f'Thanks for requesting a HireParrot demo for '
-        f'<strong>{_esc(req.company)}</strong>. We\'ve received your details '
-        'and someone from our team will reach out within '
-        '<strong>one business day</strong> to set up a 30-minute walkthrough.'
+        "We've received your demo request for "
+        f'<strong>{_esc(req.company)}</strong>. Someone from our team will '
+        f'contact you soon at <a href="mailto:{_esc(req.email)}" '
+        f'style="color:#2eb872;">{_esc(req.email)}</a> to schedule a '
+        '30-minute walkthrough.'
         '</p>'
-        '<p style="margin:0 0 14px;">'
-        'In the meantime, you can explore the platform at '
-        '<a href="https://hireparrot.com" style="color:#2eb872;">hireparrot.com</a>'
-        ' — and just reply to this email if you have any questions.'
+        '<p style="margin:0 0 14px;color:#555;">'
+        'If you have any questions in the meantime, just reply to this '
+        'thread — it\'ll reach '
+        '<a href="mailto:hello@hireparrot.com" style="color:#2eb872;">hello@hireparrot.com</a>.'
         '</p>'
         '<p style="margin:24px 0 0;color:#666;">— Team HireParrot</p>'
         '<p style="margin:4px 0 0;color:#999;font-size:13px;">'
-        '<a href="mailto:hello@hireparrot.com" style="color:#999;">hello@hireparrot.com</a>'
+        '<a href="https://hireparrot.com" style="color:#999;">hireparrot.com</a>'
+        '</p>'
+        '<hr style="border:none;border-top:1px solid #eee;margin:24px 0 12px;" />'
+        '<p style="margin:0;color:#bbb;font-size:11px;line-height:1.5;">'
+        'This is an automated confirmation from <code>noreply@hireparrot.com</code>. '
+        'Replies to this address are not monitored.'
         '</p>'
         '</div>'
     )
@@ -182,10 +192,16 @@ def send_autoreply(req: DemoRequest) -> bool:
     msg = EmailMultiAlternatives(
         subject=_autoreply_subject(req),
         body=_autoreply_text(req),
-        from_email=settings.DEFAULT_FROM_EMAIL,
+        # Auto-replies ship from the noreply identity so users don't reply
+        # straight back into a black hole on hello@. Reply-To still points
+        # to hello@ so a "Reply" button DOES land in the right inbox.
+        from_email=settings.AUTOREPLY_FROM_EMAIL,
         to=[req.email],
         reply_to=["hello@hireparrot.com"],
-        headers={"X-HireParrot-Source": "demo-autoreply"},
+        headers={
+            "X-HireParrot-Source": "demo-autoreply",
+            "Auto-Submitted": "auto-replied",
+        },
     )
     msg.attach_alternative(_autoreply_html(req), "text/html")
     try:

@@ -151,6 +151,13 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL", "HireParrot <hello@hireparrot.com>",
 )
 DEMO_NOTIFY_EMAIL = os.getenv("DEMO_NOTIFY_EMAIL", "hello@hireparrot.com")
+# Transactional auto-replies (demo confirmation, etc.) ship from a
+# noreply address so users don't accidentally reply to a black hole on
+# the support channel. Both addresses live under the verified domain
+# (hireparrot.com), so no extra SES identity setup is needed.
+AUTOREPLY_FROM_EMAIL = os.getenv(
+    "AUTOREPLY_FROM_EMAIL", "HireParrot <noreply@hireparrot.com>",
+)
 
 EMAIL_BACKEND = (
     "django_ses.SESBackend"
