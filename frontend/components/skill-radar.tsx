@@ -36,7 +36,7 @@ export interface SkillRadarProps {
 
 export function SkillRadar({
   data,
-  color = "#4f46e5",
+  color = "#1EAA50",
   maxSpokes = 8,
   hideValueChips = false,
 }: SkillRadarProps) {

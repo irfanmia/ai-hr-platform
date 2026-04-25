@@ -1,33 +1,60 @@
+/* ── Webfont — Mulish (closest free Proxima Nova twin, Google Fonts CDN) ─ */
+@import url("https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
+  /* name.com inspired neutral surfaces */
+  --background: 0 0% 100%;          /* pure white page bg */
+  --foreground: 0 0% 13%;           /* #222222 — gray-900 */
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --primary: 231 83% 57%;
-  --primary-foreground: 0 0% 100%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 231 83% 57%;
-  --destructive: 0 84% 60%;
+  --card-foreground: 0 0% 13%;
+
+  /* Primary — name.com green (#6EDA78) expressed as HSL */
+  --primary: 126 60% 64%;
+  --primary-foreground: 0 0% 16%;   /* dark text on green for contrast */
+
+  /* Muted greys mirror name.com's gray scale */
+  --muted: 0 0% 96%;                /* gray-100 */
+  --muted-foreground: 0 0% 31%;     /* gray-700 */
+
+  --border: 0 0% 89%;               /* a touch more pastel than indigo */
+  --input: 0 0% 89%;
+  --ring: 126 60% 64%;              /* same as primary */
+  --destructive: 0 73% 56%;         /* #E63838 */
+
   --radius: 1rem;
-  --font-sans: "Satoshi", "Avenir Next", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  /* Mulish first; system fallback never visible after fonts load */
+  --font-sans: "Mulish", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
 }
 
 * {
   border-color: hsl(var(--border));
 }
 
+html, body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  background:
-    radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  /* name.com-style clean white surface, no gradient noise */
+  background: #ffffff;
   color: hsl(var(--foreground));
   min-height: 100vh;
+  /* Slightly tighter tracking matches name.com's display feel */
+  letter-spacing: -0.005em;
 }
+
+/* Headings get the tighter tracking name.com uses on display text */
+h1, h2, h3 {
+  letter-spacing: -0.025em;
+}
+h1 { font-weight: 700; }
+h2, h3 { font-weight: 600; }

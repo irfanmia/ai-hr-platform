@@ -61,7 +61,7 @@ def _styles():
         "score_big": ParagraphStyle(
             "ScoreBig", parent=base["Normal"], fontName="Helvetica-Bold",
             fontSize=42, leading=48, alignment=1,  # centre
-            textColor=colors.HexColor("#4f46e5"),
+            textColor=colors.HexColor("#048132"),  # brand green-900
         ),
         "score_label": ParagraphStyle(
             "ScoreLabel", parent=base["Normal"], fontName="Helvetica",
@@ -199,7 +199,9 @@ def build_report_pdf(metadata: PdfMetadata, ai_report: dict) -> bytes:
     rs = int(ai_report.get("resume_strength_score") or 0)
     ap = int(ai_report.get("actual_performance_score") or 0)
     story.append(Paragraph("Resume vs Performance", s["section"]))
-    story.append(_bar_row("Resume strength", rs, "#6366f1"))
+    # Resume bar = brand green-700; Interview bar = emerald-500 to keep the
+    # two bars visually distinct against each other.
+    story.append(_bar_row("Resume strength", rs, "#1EAA50"))
     story.append(_bar_row("Interview performance", ap, "#10b981"))
 
     gap = ai_report.get("gap_analysis") or {}
@@ -271,7 +273,8 @@ def build_report_pdf(metadata: PdfMetadata, ai_report: dict) -> bytes:
         story.append(Paragraph("Behavioral Insights", s["section"]))
         for k in ("confidence", "clarity", "depth_of_knowledge"):
             if k in bi:
-                story.append(_bar_row(k.replace("_", " ").title(), int(bi[k] or 0), "#6366f1"))
+                # brand green-700 for behavioral insight bars
+                story.append(_bar_row(k.replace("_", " ").title(), int(bi[k] or 0), "#1EAA50"))
 
     doc.build(story)
     return buf.getvalue()

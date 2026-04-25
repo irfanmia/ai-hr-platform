@@ -124,7 +124,9 @@ def install_branding(canvas: Canvas, doc, metadata: PdfMetadata) -> None:
     width, height = A4
 
     # ─── Header band ───────────────────────────────────────────────────
-    canvas.setFillColor(colors.HexColor("#4f46e5"))  # indigo-600
+    # name.com brand: green-700 deep band (#1EAA50) with white text. Deep
+    # green keeps WCAG AA contrast against white better than #6EDA78 would.
+    canvas.setFillColor(colors.HexColor("#1EAA50"))
     canvas.rect(0, height - 14 * mm, width, 14 * mm, stroke=0, fill=1)
 
     canvas.setFillColor(colors.white)
@@ -146,6 +148,11 @@ def install_branding(canvas: Canvas, doc, metadata: PdfMetadata) -> None:
         height - 12.5 * mm,
         f"{metadata.job_title} · #{metadata.application_id}",
     )
+
+    # Subtle green underline below the band — accent line at brand-500.
+    canvas.setStrokeColor(colors.HexColor("#6EDA78"))
+    canvas.setLineWidth(1.2)
+    canvas.line(0, height - 14 * mm, width, height - 14 * mm)
 
     # ─── Footer band ───────────────────────────────────────────────────
     footer_y = 12 * mm
