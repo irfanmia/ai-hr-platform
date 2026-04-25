@@ -2019,6 +2019,17 @@ to { transform: translateX(0); }
   gap: 10px;
 }
 .hp-page .nav-mobile-cta .btn { justify-content: center; }
+/* Override the generic `.nav-mobile a` rule above for buttons — the original
+   selector wins on specificity and would otherwise tint .btn-primary text dark
+   on dark and add a 14px-tall list-item padding + bottom border. */
+.hp-page .nav-mobile a.btn {
+  padding: 11px 18px;
+  border-bottom: none;
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+}
+.hp-page .nav-mobile a.btn-primary { color: var(--bg); }
+.hp-page .nav-mobile a.btn-ghost   { color: var(--ink); border: 1px solid var(--line); }
 @media (max-width: 880px) {.hp-page .nav-burger { display: flex; margin-left: auto; }
 .hp-page .nav-cta { display: none; }
 .hp-page .nav-mobile { display: flex; }
