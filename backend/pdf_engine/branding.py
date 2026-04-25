@@ -28,11 +28,12 @@ from .fonts import brand_fonts
 
 # ─── Public verify endpoint config ────────────────────────────────────────
 
-# The host visitors land on when they scan the QR. Defaults to the live
-# Vercel URL, override with env if you swap domains.
+# The host visitors land on when they scan the QR. Defaults to the
+# production hireparrot.com domain; override with env if you swap domains
+# (e.g. an enterprise self-host or staging environment).
 PUBLIC_VERIFY_BASE = os.getenv(
     "PDF_VERIFY_BASE_URL",
-    "https://wayne-ai-hr.vercel.app/verify",
+    "https://hireparrot.com/verify",
 )
 
 # HMAC signing secret. MUST be set in production .env.

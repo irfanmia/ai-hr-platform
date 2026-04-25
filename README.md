@@ -2,7 +2,7 @@
 
 An AI-powered hiring platform that transforms recruitment through intelligent resume parsing, claim-based AI interviews, and structured candidate evaluation reports.
 
-> **Live Demo:** https://wayne-ai-hr.vercel.app
+> **Live Demo:** https://hireparrot.com
 > **GitHub:** https://github.com/irfanmia/ai-hr-platform
 
 ---
@@ -84,8 +84,8 @@ ai-hr-platform/
 
 ### Frontend — Vercel
 
-- **URL:** https://wayne-ai-hr.vercel.app
-- **Alias:** `wayne-ai-hr.vercel.app`
+- **URL:** https://hireparrot.com
+- **Alias:** `hireparrot.com`
 - **Project:** `irfanmias-projects/frontend`
 - **Framework:** Next.js (auto-detected)
 - **Build command:** `npm run build`
@@ -265,7 +265,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/api  # Local development
 ```bash
 cd frontend
 npx vercel deploy --prod --yes --token "<vercel-token>"
-npx vercel alias set <deployment-url> wayne-ai-hr.vercel.app --token "<vercel-token>"
+npx vercel alias set <deployment-url> hireparrot.com --token "<vercel-token>"
 ```
 
 ### Deploy backend update
@@ -300,13 +300,13 @@ systemctl restart aihr
 
 | Surface | URL |
 |---------|-----|
-| Job Listings | https://wayne-ai-hr.vercel.app/jobs |
-| Candidate Login / Sign Up | https://wayne-ai-hr.vercel.app/login |
-| Candidate Dashboard | https://wayne-ai-hr.vercel.app/my-dashboard |
-| HR Admin Login | https://wayne-ai-hr.vercel.app/admin-login |
-| HR Dashboard | https://wayne-ai-hr.vercel.app/dashboard |
+| Job Listings | https://hireparrot.com/jobs |
+| Candidate Login / Sign Up | https://hireparrot.com/login |
+| Candidate Dashboard | https://hireparrot.com/my-dashboard |
+| HR Admin Login | https://hireparrot.com/admin-login |
+| HR Dashboard | https://hireparrot.com/dashboard |
 | Django Admin | http://\<server-ip\>/admin/ |
-| API Root | https://wayne-ai-hr.vercel.app/api/ |
+| API Root | https://hireparrot.com/api/ |
 
 ---
 

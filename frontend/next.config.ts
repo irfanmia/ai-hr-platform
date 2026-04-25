@@ -32,6 +32,26 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Canonicalise the brand on hireparrot.com (apex). Anyone hitting the
+  // old wayne-ai-hr.vercel.app preview alias OR the www. subdomain is
+  // 308'd to the same path on https://hireparrot.com — keeps bookmarks +
+  // SEO pointed at one URL.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "wayne-ai-hr.vercel.app" }],
+        destination: "https://hireparrot.com/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.hireparrot.com" }],
+        destination: "https://hireparrot.com/:path*",
+        permanent: true,
+      },
+    ];
+  },
   trailingSlash: false,
   skipTrailingSlashRedirect: true,
 };
