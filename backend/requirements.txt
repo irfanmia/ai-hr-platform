@@ -19,3 +19,7 @@ qrcode[pil]>=7.4
 # Fonts ships) into static TTFs at the weights reportlab needs.
 fonttools>=4.50
 brotli>=1.1
+# AWS SES email backend (uses boto3 with IAM credentials — same access key
+# we already use for S3, no separate SES SMTP credentials needed).
+django-ses>=4.0
+boto3>=1.34
