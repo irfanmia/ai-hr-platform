@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Briefcase, ClipboardList, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 
+import { BrandWordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { clearHr } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,9 @@ export function DashboardSidebar() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-200">Recruiter Console</p>
-          <h2 className="mt-2 text-xl font-semibold">AI HR Platform</h2>
+          <div className="mt-2">
+            <BrandWordmark size="md" inverse hideTld />
+          </div>
         </div>
         {/* Close button — mobile only */}
         <button
@@ -88,7 +91,7 @@ export function DashboardSidebar() {
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-indigo-950 px-4 py-3 text-white lg:hidden">
         <div>
           <p className="text-xs font-medium text-indigo-300">Recruiter Console</p>
-          <h2 className="text-base font-semibold">AI HR Platform</h2>
+          <BrandWordmark size="sm" inverse hideTld />
         </div>
         <button
           onClick={() => setOpen(true)}

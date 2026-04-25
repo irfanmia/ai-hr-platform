@@ -291,7 +291,7 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
 
         {/* Print header — only visible when printing */}
         <div className="hidden print:block mb-8 border-b pb-6">
-          <h1 className="text-2xl font-bold text-slate-900">AI HR Platform — Candidate Report</h1>
+          <h1 className="text-2xl font-bold text-slate-900">HireParrot — Candidate Report</h1>
           <p className="text-sm text-slate-500 mt-1">Generated on {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
         </div>
 

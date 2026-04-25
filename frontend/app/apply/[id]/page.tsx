@@ -220,7 +220,7 @@ export default function ApplyPage({ params }: { params: any }) {
           setUploadState("error");
           setUploadError(
             `You have reached the maximum of ${MAX_ATTEMPTS} upload attempts. ` +
-            `Please contact support at support@wayneintelligence.com for assistance.`
+            `Please contact support at support@hireparrot.com for assistance.`
           );
         } else {
           const remaining = MAX_ATTEMPTS - attempt;
@@ -569,7 +569,7 @@ export default function ApplyPage({ params }: { params: any }) {
                         {uploadAttempts >= MAX_ATTEMPTS && (
                           <p className="text-xs text-red-500">
                             Need help?{" "}
-                            <a href="mailto:support@wayneintelligence.com" className="font-medium underline">Contact support</a>
+                            <a href="mailto:support@hireparrot.com" className="font-medium underline">Contact support</a>
                           </p>
                         )}
                         {uploadAttempts > 0 && uploadAttempts < MAX_ATTEMPTS && (

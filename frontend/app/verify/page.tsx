@@ -69,7 +69,7 @@ function VerifyInner() {
               </h1>
               <p className="text-sm text-slate-500">
                 {isValid
-                  ? "This PDF was issued by AI HR Platform."
+                  ? "This PDF was issued by HireParrot."
                   : "The token is invalid, tampered with, or no longer points to a real application."}
               </p>
             </div>
@@ -124,7 +124,7 @@ function VerifyInner() {
           )}
 
           <div className="flex justify-between border-t border-slate-100 pt-4 text-xs text-slate-400">
-            <span>AI HR Platform · Document verification</span>
+            <span>HireParrot · Document verification</span>
             <Link href="/jobs" className="text-indigo-500 hover:underline">
               Browse jobs →
             </Link>

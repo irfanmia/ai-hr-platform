@@ -96,7 +96,7 @@ class PdfMetadata:
     doc_type: str           # "responses" | "report" | "combined"
     doc_title: str          # human-readable, shown in header
     generated_at: datetime  # kept on the metadata for footer + QR
-    org_name: str = "AI HR Platform"
+    org_name: str = "HireParrot"
 
 
 def _qr_image_bytes(data: str, size_mm: int = 18) -> bytes:

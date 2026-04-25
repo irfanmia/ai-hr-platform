@@ -59,8 +59,8 @@ export default function RouteError({
           </div>
           <p className="text-xs text-slate-400">
             If this keeps happening, email{" "}
-            <a href="mailto:support@wayneintelligence.com" className="text-indigo-600 hover:underline">
-              support@wayneintelligence.com
+            <a href="mailto:support@hireparrot.com" className="text-indigo-600 hover:underline">
+              support@hireparrot.com
             </a>{" "}
             with the error ID above.
           </p>

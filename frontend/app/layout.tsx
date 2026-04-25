@@ -5,8 +5,11 @@ import { AuthToast } from "@/components/auth-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI HR Platform",
-  description: "AI-powered HR platform built with Next.js and Django",
+  title: "HireParrot — AI-driven hiring with verifiable interviews",
+  description:
+    "HireParrot turns hiring from resume-based screening into skill, behaviour and "
+    + "claim-validation through AI-graded video interviews — every candidate report "
+    + "comes with a signed, scannable verification code.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

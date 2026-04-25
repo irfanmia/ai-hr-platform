@@ -47,7 +47,7 @@ export default function GlobalError({
           </h1>
           <p style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
             A fatal error broke the page before it could render. Try reloading — if this keeps
-            happening, email support@wayneintelligence.com.
+            happening, email support@hireparrot.com.
           </p>
           {error?.digest && (
             <p

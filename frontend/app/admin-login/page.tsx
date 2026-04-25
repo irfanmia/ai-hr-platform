@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { BrandWordmark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,9 +41,9 @@ export default function AdminLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 px-6 py-12">
       <div className="w-full max-w-md space-y-4">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white">AI HR Platform</h1>
-          <p className="text-slate-400 text-sm mt-1">HR Administrator Portal</p>
+        <div className="text-center mb-6 flex flex-col items-center gap-2">
+          <BrandWordmark size="lg" inverse hideTld />
+          <p className="text-slate-400 text-sm">HR Administrator Portal</p>
         </div>
 
         <Card className="rounded-3xl border-slate-700 bg-slate-800">
