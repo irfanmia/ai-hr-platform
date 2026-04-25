@@ -48,12 +48,22 @@ interface UserCtx {
   signOut: () => void;
 }
 
-function useNavUserContext(): UserCtx | null {
-  const { isHrLoggedIn, isCandidateLoggedIn, hr, candidate } = useAuth();
+interface NavAuthState {
+  user: UserCtx | null;
+  /** False until the auth store has been read on the client. While false,
+   *  the nav renders a neutral placeholder so we don't flash "Sign in"
+   *  → avatar on every cross-page navigation. */
+  hydrated: boolean;
+}
+
+function useNavAuth(): NavAuthState {
+  const { isHrLoggedIn, isCandidateLoggedIn, hr, candidate, hydrated } = useAuth();
+
+  let user: UserCtx | null = null;
 
   if (isHrLoggedIn && hr) {
     const displayName = (hr.name as string) || hr.email?.split("@")[0] || "Recruiter";
-    return {
+    user = {
       displayName,
       email: (hr.email as string | undefined) ?? null,
       initial: initialOf(displayName),
@@ -64,11 +74,9 @@ function useNavUserContext(): UserCtx | null {
         window.location.href = "/";
       },
     };
-  }
-
-  if (isCandidateLoggedIn && candidate) {
+  } else if (isCandidateLoggedIn && candidate) {
     const displayName = (candidate.name as string) || candidate.email?.split("@")[0] || "Candidate";
-    return {
+    user = {
       displayName,
       email: (candidate.email as string | undefined) ?? null,
       initial: initialOf(displayName),
@@ -81,10 +89,37 @@ function useNavUserContext(): UserCtx | null {
     };
   }
 
-  return null;
+  return { user, hydrated };
 }
 
-function AuthCta({ user, mobile = false }: { user: UserCtx | null; mobile?: boolean }) {
+/** Neutral round placeholder rendered while the auth store is hydrating —
+ *  same dimensions as the avatar / sign-in pill so there's no layout shift
+ *  and no flash of "Sign in" before the avatar appears. */
+function AuthSkeleton() {
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: "50%",
+        background: "var(--bg-2, #f0f0f0)",
+        border: "1px solid var(--line, #e6e6e6)",
+        opacity: 0.6,
+      }}
+    />
+  );
+}
+
+function AuthCta({
+  user,
+  hydrated,
+  mobile = false,
+}: {
+  user: UserCtx | null;
+  hydrated: boolean;
+  mobile?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -104,6 +139,12 @@ function AuthCta({ user, mobile = false }: { user: UserCtx | null; mobile?: bool
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  // While the auth store is hydrating, render a neutral placeholder so we
+  // don't flash "Sign in" → avatar on every cross-page navigation.
+  if (!hydrated) {
+    return <AuthSkeleton />;
+  }
 
   if (!user) {
     return (
@@ -254,7 +295,7 @@ function AuthCta({ user, mobile = false }: { user: UserCtx | null; mobile?: bool
 }
 
 export function LandingNav() {
-  const user = useNavUserContext();
+  const { user, hydrated } = useNavAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -302,7 +343,7 @@ export function LandingNav() {
           ))}
         </nav>
         <div className="nav-cta">
-          <AuthCta user={user} />
+          <AuthCta user={user} hydrated={hydrated} />
           <Link href="/jobs" className="btn btn-primary">
             Try now
             {arrow}
@@ -328,7 +369,7 @@ export function LandingNav() {
           </a>
         ))}
         <div className="nav-mobile-cta">
-          <AuthCta user={user} mobile />
+          <AuthCta user={user} hydrated={hydrated} mobile />
           <Link
             href="/jobs"
             className="btn btn-primary"

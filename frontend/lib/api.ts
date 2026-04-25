@@ -372,6 +372,34 @@ export function friendlyLoginError(err: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+// ─── Email verification (public signup flow) ──────────────────────────────
+
+export interface VerifyEmailResponse {
+  verified?: boolean;
+  already_verified?: boolean;
+  access: string;
+  refresh: string;
+  user: { name: string; email: string };
+}
+
+/** Hand the click-link token to the backend; on success returns JWT tokens
+ *  for an immediate auto-login (or a 400 if the link is invalid/expired). */
+export async function verifyEmailToken(token: string): Promise<VerifyEmailResponse> {
+  const r = await api.get<VerifyEmailResponse>(
+    "/auth/verify-email/", { params: { token } },
+  );
+  return r.data;
+}
+
+/** Request a fresh verification email. Always 200 — the backend never
+ *  reveals whether the email is registered (account-enumeration guard). */
+export async function resendVerificationEmail(email: string): Promise<{ detail: string }> {
+  const r = await api.post<{ detail: string }>(
+    "/auth/resend-verification/", { email },
+  );
+  return r.data;
+}
+
 // ─── Demo request (public landing-page form) ───────────────────────────────
 
 export interface DemoRequestPayload {

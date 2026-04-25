@@ -14,7 +14,19 @@ import { decodeJwt, getAuthState, setCandidateTokens, setHrTokens } from "@/lib/
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
-async function registerCandidate(name: string, email: string, password: string) {
+interface RegisterResponse {
+  /** New verification flow returns this instead of JWT tokens. */
+  verification_required?: boolean;
+  email?: string;
+  message?: string;
+  /** Legacy auto-login response (for accounts that pre-date the gate). */
+  access?: string;
+  refresh?: string;
+}
+
+async function registerCandidate(
+  name: string, email: string, password: string,
+): Promise<RegisterResponse> {
   const res = await fetch(`${API}/auth/register/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -23,6 +35,14 @@ async function registerCandidate(name: string, email: string, password: string) 
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Registration failed");
   return data;
+}
+
+async function resendVerification(email: string): Promise<void> {
+  await fetch(`${API}/auth/resend-verification/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
 }
 
 function LoginSignupForm() {
@@ -39,6 +59,15 @@ function LoginSignupForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // After a successful signup we swap the form for a "check your email"
+  // panel; null means still on the form. Stores the email so the resend
+  // button knows where to send.
+  const [verifySent, setVerifySent] = useState<string | null>(null);
+  // Set when login fails because the candidate hasn't verified yet — lets
+  // us show the "Resend verification email" button inline.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">("idle");
+
   useEffect(() => {
     if (searchParams.get("error") === "not_staff") {
       setError("That account doesn't have HR access. Log in as a candidate below.");
@@ -54,7 +83,7 @@ function LoginSignupForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setLoading(true);
+    setError(""); setUnverifiedEmail(null); setLoading(true);
 
     try {
       if (mode === "signup") {
@@ -62,8 +91,20 @@ function LoginSignupForm() {
         if (password !== confirmPassword) { setError("Passwords do not match."); return; }
         if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
         const data = await registerCandidate(name, email, password);
-        setCandidateTokens(data.access, data.refresh);
-        router.push("/my-dashboard");
+
+        // New flow: backend sent a verification email; show the
+        // check-your-inbox panel instead of auto-logging in.
+        if (data.verification_required) {
+          setVerifySent(email);
+          return;
+        }
+
+        // Legacy / pre-verification accounts may still come back with
+        // an immediate JWT — keep the auto-login path for those.
+        if (data.access && data.refresh) {
+          setCandidateTokens(data.access, data.refresh);
+          router.push("/my-dashboard");
+        }
 
       } else if (mode === "login-candidate") {
         const tokens = await login(email, password);
@@ -89,9 +130,35 @@ function LoginSignupForm() {
         router.push("/dashboard");
       }
     } catch (err) {
-      setError(friendlyLoginError(err));
+      // SimpleJWT returns "no_active_account" + 401 when is_active=False —
+      // surface a verification-specific error with a resend button.
+      const msg = friendlyLoginError(err);
+      const e = err as { response?: { data?: { detail?: string; code?: string } } };
+      const detail = e?.response?.data?.detail ?? "";
+      const code = e?.response?.data?.code ?? "";
+      const isUnverified =
+        code === "no_active_account" ||
+        /no active account/i.test(detail) ||
+        /not active/i.test(detail);
+      if (isUnverified && mode !== "login-hr") {
+        setError("Please verify your email before signing in.");
+        setUnverifiedEmail(email);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResend(targetEmail: string) {
+    setResendStatus("sending");
+    try {
+      await resendVerification(targetEmail);
+      setResendStatus("sent");
+    } catch {
+      setResendStatus("idle");
+      setError("Couldn't send the verification email. Please try again.");
     }
   }
 
@@ -118,6 +185,40 @@ function LoginSignupForm() {
           </div>
 
           <Card className="rounded-3xl shadow-sm">
+            {verifySent ? (
+              <CardContent className="space-y-4 py-8 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl">📧</div>
+                <h2 className="text-lg font-semibold text-slate-900">Check your inbox</h2>
+                <p className="text-sm leading-relaxed text-slate-600">
+                  We've sent a verification link to{" "}
+                  <span className="font-medium text-slate-900">{verifySent}</span>.
+                  Click the link to finish setting up your account — it expires in 24 hours.
+                </p>
+                <p className="text-xs text-slate-500">
+                  Didn't see it? Check your spam folder, or{" "}
+                  <button
+                    type="button"
+                    onClick={() => handleResend(verifySent)}
+                    disabled={resendStatus !== "idle"}
+                    className="font-medium text-indigo-600 hover:underline disabled:opacity-60"
+                  >
+                    {resendStatus === "sending" ? "sending…" : resendStatus === "sent" ? "sent ✓" : "resend the email"}
+                  </button>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerifySent(null);
+                    setMode("login-candidate");
+                    setError("");
+                    setResendStatus("idle");
+                  }}
+                  className="text-sm font-medium text-slate-600 hover:text-slate-900"
+                >
+                  Back to sign in
+                </button>
+              </CardContent>
+            ) : <>
             <CardHeader>
               <CardTitle>
                 {mode === "signup" ? "Create your account" : "Welcome back"}
@@ -150,7 +251,19 @@ function LoginSignupForm() {
                 )}
 
                 {error && (
-                  <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+                  <div className="space-y-2">
+                    <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+                    {unverifiedEmail && (
+                      <button
+                        type="button"
+                        onClick={() => handleResend(unverifiedEmail)}
+                        disabled={resendStatus !== "idle"}
+                        className="text-sm font-medium text-indigo-600 hover:underline disabled:opacity-60"
+                      >
+                        {resendStatus === "sending" ? "Sending verification email…" : resendStatus === "sent" ? "✓ Verification email sent — check your inbox" : "Resend verification email →"}
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 <Button className="w-full" type="submit" disabled={loading}>
@@ -173,6 +286,7 @@ function LoginSignupForm() {
 
               </div>
             </CardContent>
+            </>}
           </Card>
 
           {/* Browse jobs CTA */}

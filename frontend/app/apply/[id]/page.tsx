@@ -385,14 +385,25 @@ export default function ApplyPage({ params }: { params: any }) {
         const data = await loginCandidate(authForm.email, authForm.password);
         setCandidateTokens(data.access, data.refresh);
         setForm((f) => ({ ...f, email: authForm.email, candidate_name: authForm.email.split("@")[0] }));
+        setStep(2);
       } else {
         if (authForm.password !== authForm.confirmPassword) { setAuthError("Passwords do not match."); return; }
         if (authForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
         const data = await registerCandidate(authForm.name, authForm.email, authForm.password);
+        // New flow: signup returns verification_required (no JWT). Send the
+        // user to /login (it shows the "check your email" panel) and they
+        // can come back to apply once they've clicked the link in their email.
+        if (data.verification_required) {
+          setAuthError(
+            `We've sent a verification link to ${authForm.email}. Click it to activate your account, then come back to apply.`,
+          );
+          return;
+        }
+        // Legacy auto-login path (in case verification flow isn't deployed yet)
         setCandidateTokens(data.access, data.refresh);
         setForm((f) => ({ ...f, email: authForm.email, candidate_name: authForm.name }));
+        setStep(2);
       }
-      setStep(2);
     } catch (err: any) {
       setAuthError(err.message);
     } finally {

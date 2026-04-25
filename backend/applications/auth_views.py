@@ -40,10 +40,32 @@ class HRTokenObtainPairView(TokenObtainPairView):
     serializer_class = HRTokenObtainPairSerializer
 
 
+def _client_ip(request) -> str:
+    """Trust the rightmost X-Forwarded-For hop (Vercel/Nginx in front)."""
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if xff:
+        return xff.split(",")[-1].strip()
+    return request.META.get("REMOTE_ADDR", "0.0.0.0")
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def candidate_register(request):
-    """Register a candidate account and return JWT tokens."""
+    """Register a candidate account and email a verification link.
+
+    The user is created with `is_active=False` so SimpleJWT blocks login
+    until they click the link in the verification email. Returns
+    `verification_required: True` (no JWT tokens) — the frontend swaps
+    the form for a "check your email" message.
+
+    If the user already exists but is unverified, we treat the call as a
+    resend-verification — generate a fresh token and email it. Avoids
+    the dead-end where someone signs up, ignores the email, and comes
+    back to a "this email already exists" wall.
+    """
+    from accounts.emails import send_verification_email
+    from accounts.models import EmailVerificationToken
+
     User = get_user_model()
     name = request.data.get("name", "").strip()
     email = request.data.get("email", "").strip().lower()
@@ -55,8 +77,26 @@ def candidate_register(request):
     if len(password) < 6:
         return Response({"error": "Password must be at least 6 characters."}, status=status.HTTP_400_BAD_REQUEST)
 
-    if User.objects.filter(email__iexact=email).exists():
-        return Response({"error": "An account with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+    existing = User.objects.filter(email__iexact=email).first()
+    if existing:
+        if existing.is_active:
+            return Response(
+                {"error": "An account with this email already exists. Please sign in."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Resend the verification email instead of bouncing the user
+        token = EmailVerificationToken.objects.create(
+            user=existing, source_ip=_client_ip(request),
+        )
+        send_verification_email(existing, token)
+        return Response(
+            {
+                "verification_required": True,
+                "email": email,
+                "message": "We've re-sent the verification link to your email.",
+            },
+            status=status.HTTP_200_OK,
+        )
 
     # Build a unique username from email
     base_username = email.split("@")[0]
@@ -66,20 +106,33 @@ def candidate_register(request):
         username = f"{base_username}{counter}"
         counter += 1
 
-    user = User.objects.create_user(username=username, email=email, password=password, first_name=name.split()[0], last_name=" ".join(name.split()[1:]))
+    parts = name.split()
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        first_name=parts[0],
+        last_name=" ".join(parts[1:]),
+    )
+    # Lock the account until the email is verified. HR/admin accounts
+    # are created via createsuperuser / Django admin and bypass this.
+    user.is_active = False
+    user.save(update_fields=["is_active"])
 
-    refresh = RefreshToken.for_user(user)
-    access = refresh.access_token
-    # Embed is_staff in token
-    access["is_staff"] = user.is_staff
-    access["is_superuser"] = user.is_superuser
-    access["email"] = email
-    access["name"] = name
-    return Response({
-        "access": str(access),
-        "refresh": str(refresh),
-        "user": {"name": name, "email": email},
-    }, status=status.HTTP_201_CREATED)
+    token = EmailVerificationToken.objects.create(
+        user=user, source_ip=_client_ip(request),
+    )
+    send_verification_email(user, token)
+
+    return Response(
+        {
+            "verification_required": True,
+            "email": email,
+            "message": "We've sent a verification link to your email. "
+                       "Click it to finish setting up your account.",
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["GET"])

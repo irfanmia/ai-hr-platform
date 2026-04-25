@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "applications",
     "ai_engine",
     "demo_requests",
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -157,6 +158,11 @@ DEMO_NOTIFY_EMAIL = os.getenv("DEMO_NOTIFY_EMAIL", "hello@hireparrot.com")
 # (hireparrot.com), so no extra SES identity setup is needed.
 AUTOREPLY_FROM_EMAIL = os.getenv(
     "AUTOREPLY_FROM_EMAIL", "HireParrot <noreply@hireparrot.com>",
+)
+# Public URL the click-to-verify link in signup emails points to. Frontend
+# /verify-email page reads ?token= and posts it to /api/auth/verify-email/.
+EMAIL_VERIFY_BASE_URL = os.getenv(
+    "EMAIL_VERIFY_BASE_URL", "https://hireparrot.com/verify-email",
 )
 
 EMAIL_BACKEND = (

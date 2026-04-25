@@ -17,6 +17,7 @@ urlpatterns = [
     path("api/auth/profile/", candidate_profile, name="candidate_profile"),
     path("api/auth/profile/update/", update_profile, name="update_profile"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/auth/", include("accounts.urls")),
     # Public — used by the QR code on every issued PDF for verification
     path("api/verify/", VerifyDocumentView.as_view(), name="verify-document"),
     # Public — landing-page "Book a demo" form submissions
