@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
-import { PublicNav } from "@/components/public-nav";
+import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +33,7 @@ export default function JobDetailPage({ params }: { params: any }) {
   if (loading) {
     return (
       <div className="min-h-screen">
-        <PublicNav />
+        <SiteHeader />
         <div className="mx-auto max-w-7xl px-6 py-12">
           <Skeleton className="h-96 rounded-3xl" />
         </div>
@@ -45,7 +45,7 @@ export default function JobDetailPage({ params }: { params: any }) {
 
   return (
     <div className="min-h-screen">
-      <PublicNav />
+      <SiteHeader />
       <main className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-[1fr_320px]">
         <section className="space-y-8">
           <div className="space-y-4">

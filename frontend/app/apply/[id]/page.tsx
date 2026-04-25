@@ -4,7 +4,7 @@ import { CheckCircle, Loader2, UploadCloud } from "lucide-react";
 import Link from "next/link";
 import { use, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
-import { PublicNav } from "@/components/public-nav";
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -402,7 +402,7 @@ export default function ApplyPage({ params }: { params: any }) {
 
   return (
     <div className="min-h-screen">
-      <PublicNav />
+      <SiteHeader />
       <main className="mx-auto max-w-4xl px-6 py-12">
 
         {/* Step indicators */}

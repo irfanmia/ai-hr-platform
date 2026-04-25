@@ -12,26 +12,21 @@
  * (Mulish font, Tailwind base) and the design would look wrong.
  */
 import { LandingBootstrap } from "@/components/landing/landing-bootstrap";
-import { LandingNav } from "@/components/landing/landing-nav";
 import { LANDING_BODY_HTML } from "@/components/landing/body";
+import { SiteHeader } from "@/components/site-header";
 
 export default function HomePage() {
   return (
     <>
-      {/* Scoped landing-page stylesheet — everything inside .hp-page picks
-          up these styles; nothing leaks to /jobs or /login. */}
-      <link rel="stylesheet" href="/landing/styles.css" />
-      {/* Display fonts used by the landing design (Inter Tight, Fraunces, etc.).
-          Mulish (the rest-of-app font) stays loaded by globals.css. */}
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      {/* Fraunces is only used by the landing body (italic-serif headlines).
+          Loaded here so it's not paid for on dashboard / job pages. */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Inter:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;1,300;1,400&display=swap"
       />
 
+      <SiteHeader />
       <div className="hp-page">
-        <LandingNav />
         <div dangerouslySetInnerHTML={{ __html: LANDING_BODY_HTML }} />
       </div>
 

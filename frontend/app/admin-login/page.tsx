@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { BrandWordmark } from "@/components/brand";
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,7 +40,9 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6 py-12">
+    <>
+      <SiteHeader />
+      <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6 py-12">
       <div className="w-full max-w-md space-y-4">
         <div className="text-center mb-6 flex flex-col items-center gap-2">
           <BrandWordmark size="lg" inverse hideTld />
@@ -93,5 +96,6 @@ export default function AdminLoginPage() {
         </p>
       </div>
     </div>
+    </>
   );
 }

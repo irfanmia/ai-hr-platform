@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { JobCard } from "@/components/job-card";
-import { PublicNav } from "@/components/public-nav";
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getJob } from "@/lib/api";
@@ -49,7 +49,7 @@ export default function SavedJobsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <PublicNav />
+      <SiteHeader />
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8 flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-full bg-indigo-100 text-indigo-600">

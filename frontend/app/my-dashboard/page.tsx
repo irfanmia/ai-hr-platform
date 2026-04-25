@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Briefcase, Bookmark, ClipboardList, FileCheck2 } from "lucide-react";
 
 import { ApplicationCard, type ApplicationLite } from "@/components/application-card";
-import { PublicNav } from "@/components/public-nav";
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -98,7 +98,7 @@ export default function CandidateDashboard() {
   if (loading) {
     return (
       <div className="min-h-screen">
-        <PublicNav />
+        <SiteHeader />
         <main className="mx-auto max-w-4xl px-6 py-12 space-y-6">
           <Skeleton className="h-32 rounded-3xl" />
           <Skeleton className="h-64 rounded-3xl" />
@@ -116,7 +116,7 @@ export default function CandidateDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <PublicNav />
+      <SiteHeader />
       <main className="mx-auto max-w-5xl px-6 py-10 space-y-8">
 
         {/* ── Hero header ── */}

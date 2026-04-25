@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -137,10 +138,13 @@ function VerifyInner() {
 
 export default function VerifyPage() {
   return (
-    <div className="min-h-screen bg-slate-50 px-6 py-12">
-      <Suspense fallback={<Skeleton className="mx-auto h-72 max-w-xl rounded-3xl" />}>
-        <VerifyInner />
-      </Suspense>
-    </div>
+    <>
+      <SiteHeader />
+      <div className="min-h-screen bg-slate-50 px-6 py-12">
+        <Suspense fallback={<Skeleton className="mx-auto h-72 max-w-xl rounded-3xl" />}>
+          <VerifyInner />
+        </Suspense>
+      </div>
+    </>
   );
 }

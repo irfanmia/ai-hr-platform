@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { JobCard } from "@/components/job-card";
-import { PublicNav } from "@/components/public-nav";
+import { SiteHeader } from "@/components/site-header";
 import { SectionHeading } from "@/components/section-heading";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -47,7 +47,7 @@ export default function JobsPage() {
 
   return (
     <div className="min-h-screen">
-      <PublicNav />
+      <SiteHeader />
       <main className="mx-auto max-w-7xl px-6 py-12">
         <SectionHeading
           eyebrow="Open Roles"

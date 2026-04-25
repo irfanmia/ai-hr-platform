@@ -17,13 +17,19 @@ import { useEffect, useRef, useState } from "react";
 import { clearCandidate, clearHr } from "@/lib/auth-store";
 import { useAuth } from "@/lib/use-auth";
 
+/**
+ * Menu hrefs are absolute (`/#how` rather than `#how`) so the same nav works
+ * from /jobs, /dashboard, /apply etc. — clicking jumps to the landing page
+ * and scrolls to the section. On the landing route itself the browser
+ * collapses /#how → #how and smooth-scrolls in-page.
+ */
 const NAV_LINKS: Array<{ href: string; label: string }> = [
-  { href: "#how", label: "How it works" },
-  { href: "#report", label: "The AI report" },
-  { href: "#why", label: "Why teams switch" },
-  { href: "#fraud", label: "Anti-fraud" },
-  { href: "#integrations", label: "Integrations" },
-  { href: "#industries", label: "Industries" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#report", label: "The AI report" },
+  { href: "/#why", label: "Why teams switch" },
+  { href: "/#fraud", label: "Anti-fraud" },
+  { href: "/#integrations", label: "Integrations" },
+  { href: "/#industries", label: "Industries" },
 ];
 
 function initialOf(name: string | null | undefined): string {
