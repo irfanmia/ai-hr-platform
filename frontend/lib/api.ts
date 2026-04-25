@@ -372,4 +372,62 @@ export function friendlyLoginError(err: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
+// ─── Demo request (public landing-page form) ───────────────────────────────
+
+export interface DemoRequestPayload {
+  name: string;
+  email: string;
+  company: string;
+  designation: string;
+  phone: string;
+  message?: string;
+}
+
+export interface DemoRequestResponse {
+  id: number;
+  message: string;
+}
+
+export async function submitDemoRequest(
+  payload: DemoRequestPayload,
+): Promise<DemoRequestResponse> {
+  const r = await api.post<DemoRequestResponse>("/demo-requests/", payload);
+  return r.data;
+}
+
+/**
+ * Translate a demo-request submission error into a friendly, single-line
+ * string. Field-level validation errors are joined into one message; the
+ * 429 rate limit gets its own copy. Falls back to the generic friendly
+ * sign-in message for unknown errors.
+ */
+export function friendlyDemoError(err: unknown): string {
+  const e = err as {
+    response?: { status?: number; data?: unknown };
+    code?: string;
+    message?: string;
+  };
+  const status = e?.response?.status;
+  const data = e?.response?.data as
+    | { detail?: string; [k: string]: unknown }
+    | undefined;
+
+  if (status === 429) {
+    return (
+      (data?.detail as string | undefined) ??
+      "Too many submissions from your network. Please try again in an hour."
+    );
+  }
+  if (status === 400 && data && typeof data === "object") {
+    const parts: string[] = [];
+    for (const [field, msgs] of Object.entries(data)) {
+      if (field === "detail") continue;
+      const text = Array.isArray(msgs) ? String(msgs[0]) : String(msgs);
+      parts.push(`${field}: ${text}`);
+    }
+    if (parts.length) return parts.join(" · ");
+  }
+  return friendlyLoginError(err);
+}
+
 export default api;

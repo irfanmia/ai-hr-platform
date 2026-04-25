@@ -899,7 +899,7 @@ not pedigree.</h2>
       <p>HireParrot is live for hiring teams in the United States, Europe, the Middle East, India, and beyond. Sign up takes less than five minutes — your first interview can be live the same day.</p>
       <div class="btns">
         <a href="/jobs" class="btn btn-primary">Try it now →</a>
-        <a href="mailto:hello@hireparrot.com" class="btn btn-ghost">Book a demo</a>
+        <a href="/demo" class="btn btn-ghost">Book a demo</a>
       </div>
     </div>
   </div>

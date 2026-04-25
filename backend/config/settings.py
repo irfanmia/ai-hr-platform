@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "jobs",
     "applications",
     "ai_engine",
+    "demo_requests",
 ]
 
 MIDDLEWARE = [
@@ -126,3 +127,28 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# ─── Email — AWS SES SMTP ────────────────────────────────────────────────
+# Demo-request notifications + auto-replies are sent through Django's SMTP
+# backend pointed at AWS SES. Set EMAIL_HOST_USER / EMAIL_HOST_PASSWORD on
+# the droplet's .env from the SES SMTP credentials (NOT the IAM keys —
+# those are different in SES).
+#
+# In dev (no SMTP creds set) the console backend logs emails to stdout so
+# nothing crashes when running locally without SES.
+EMAIL_HOST = os.getenv("EMAIL_HOST", "email-smtp.us-east-1.amazonaws.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL", "HireParrot <hello@hireparrot.com>",
+)
+DEMO_NOTIFY_EMAIL = os.getenv("DEMO_NOTIFY_EMAIL", "hello@hireparrot.com")
+
+EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD
+    else "django.core.mail.backends.console.EmailBackend"
+)

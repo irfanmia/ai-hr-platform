@@ -19,4 +19,6 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     # Public — used by the QR code on every issued PDF for verification
     path("api/verify/", VerifyDocumentView.as_view(), name="verify-document"),
+    # Public — landing-page "Book a demo" form submissions
+    path("api/demo-requests/", include("demo_requests.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
