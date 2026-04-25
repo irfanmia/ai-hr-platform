@@ -15,3 +15,7 @@ faster-whisper>=1.0.3
 reportlab>=4.0
 pypdf>=4.0
 qrcode[pil]>=7.4
+# Used to instance the variable-weight Mulish font (the only form Google
+# Fonts ships) into static TTFs at the weights reportlab needs.
+fonttools>=4.50
+brotli>=1.1
