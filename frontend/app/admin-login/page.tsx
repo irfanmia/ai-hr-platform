@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login } from "@/lib/api";
+import { friendlyLoginError, login } from "@/lib/api";
 import { decodeJwt, setHrTokens } from "@/lib/auth-store";
 
 export default function AdminLoginPage() {
@@ -30,8 +30,8 @@ export default function AdminLoginPage() {
       }
       setHrTokens(tokens.access, tokens.refresh);
       router.push("/dashboard");
-    } catch {
-      setError("Invalid credentials. Please try again.");
+    } catch (err) {
+      setError(friendlyLoginError(err));
     } finally {
       setLoading(false);
     }

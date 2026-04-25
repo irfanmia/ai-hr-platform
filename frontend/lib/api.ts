@@ -308,4 +308,44 @@ export async function verifyDocument(token: string): Promise<VerifyResponse> {
   return response.data;
 }
 
+/**
+ * Translate any thrown error from a login / auth call into a friendly,
+ * user-facing string. Hides axios's "Request failed with status code 500"
+ * boilerplate behind real human language.
+ */
+export function friendlyLoginError(err: unknown): string {
+  // Axios attaches { response: { status, data } } on HTTP errors
+  const e = err as {
+    response?: { status?: number; data?: { detail?: string; error?: string; message?: string } };
+    code?: string;
+    message?: string;
+  };
+  const status = e?.response?.status;
+  const serverMessage =
+    e?.response?.data?.detail ||
+    e?.response?.data?.error ||
+    e?.response?.data?.message;
+
+  if (status === 401 || status === 403) {
+    return "Email or password is incorrect.";
+  }
+  if (status === 400) {
+    return serverMessage || "Couldn't sign you in with those details.";
+  }
+  if (status === 429) {
+    return "Too many attempts — please wait a minute and try again.";
+  }
+  if (status === 503) {
+    return "We're under maintenance. Please try again in a moment.";
+  }
+  if (typeof status === "number" && status >= 500) {
+    return "We're having trouble signing you in. Please try again in a moment.";
+  }
+  if (e?.code === "ERR_NETWORK" || e?.message?.includes("Network Error")) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  // Last resort — never surface "Request failed with status code …" to users
+  return "Something went wrong. Please try again.";
+}
+
 export default api;

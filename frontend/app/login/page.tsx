@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login } from "@/lib/api";
+import { friendlyLoginError, login } from "@/lib/api";
 import { decodeJwt, getAuthState, setCandidateTokens, setHrTokens } from "@/lib/auth-store";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
@@ -88,8 +88,8 @@ function LoginSignupForm() {
         setHrTokens(tokens.access, tokens.refresh);
         router.push("/dashboard");
       }
-    } catch (err: any) {
-      setError(err.message || "Invalid credentials. Please try again.");
+    } catch (err) {
+      setError(friendlyLoginError(err));
     } finally {
       setLoading(false);
     }
