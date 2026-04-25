@@ -51,6 +51,24 @@ const config: Config = {
         // Auto-rebrand the existing UI: every `indigo-*` class in the
         // codebase resolves to the brand green from now on. Keeps churn tiny.
         indigo: brand,
+
+        // Brand "ink" — near-black surface used for the admin login + HR
+        // sidebar. Picked over slate-900 so the dark surfaces feel
+        // intentional and on-brand instead of generic Tailwind slate.
+        ink: {
+          DEFAULT: "#0c0e10",
+          50:   "#F4F5F6",
+          100:  "#E4E5E7",
+          200:  "#CACDD0",
+          300:  "#9DA3A8",
+          400:  "#5E666E",
+          500:  "#363B41",
+          600:  "#212529",
+          700:  "#16191C",
+          800:  "#0F1114",
+          900:  "#0C0E10",
+          950:  "#06070A",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

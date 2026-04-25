@@ -24,6 +24,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen.canvas import Canvas
 
+from .fonts import brand_fonts
+
 # ─── Public verify endpoint config ────────────────────────────────────────
 
 # The host visitors land on when they scan the QR. Defaults to the live
@@ -129,20 +131,21 @@ def install_branding(canvas: Canvas, doc, metadata: PdfMetadata) -> None:
     canvas.setFillColor(colors.HexColor("#1EAA50"))
     canvas.rect(0, height - 14 * mm, width, 14 * mm, stroke=0, fill=1)
 
+    F = brand_fonts()
     canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 11)
+    canvas.setFont(F["bold"], 11)
     canvas.drawString(15 * mm, height - 9 * mm, metadata.org_name)
-    canvas.setFont("Helvetica", 9)
+    canvas.setFont(F["regular"], 9)
     canvas.drawString(15 * mm, height - 12.5 * mm, metadata.doc_title)
 
     # Right-aligned: candidate name + job
-    canvas.setFont("Helvetica-Bold", 9)
+    canvas.setFont(F["bold"], 9)
     canvas.drawRightString(
         width - 15 * mm,
         height - 9 * mm,
         metadata.candidate_name or "Candidate",
     )
-    canvas.setFont("Helvetica", 8)
+    canvas.setFont(F["regular"], 8)
     canvas.drawRightString(
         width - 15 * mm,
         height - 12.5 * mm,
@@ -182,9 +185,9 @@ def install_branding(canvas: Canvas, doc, metadata: PdfMetadata) -> None:
 
     # Footer text — left side
     canvas.setFillColor(colors.HexColor("#475569"))  # slate-600
-    canvas.setFont("Helvetica-Bold", 8)
+    canvas.setFont(F["bold"], 8)
     canvas.drawString(15 * mm, footer_y + 12 * mm, "Document verification")
-    canvas.setFont("Helvetica", 7)
+    canvas.setFont(F["regular"], 7)
     canvas.drawString(
         15 * mm,
         footer_y + 8.5 * mm,
@@ -203,7 +206,7 @@ def install_branding(canvas: Canvas, doc, metadata: PdfMetadata) -> None:
 
     # Page number — bottom centre
     canvas.setFillColor(colors.HexColor("#94a3b8"))  # slate-400
-    canvas.setFont("Helvetica", 8)
+    canvas.setFont(F["regular"], 8)
     canvas.drawCentredString(
         width / 2,
         footer_y - 4 * mm,

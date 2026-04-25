@@ -34,6 +34,7 @@ from reportlab.platypus import (
 )
 
 from .branding import PdfMetadata, install_branding
+from .fonts import brand_fonts
 
 
 _QTYPE_LABEL = {
@@ -49,39 +50,40 @@ _NO_RESPONSE_MARKERS = {"[no response]", ""}
 
 def _styles():
     base = getSampleStyleSheet()
+    F = brand_fonts()  # registered Mulish names, or Helvetica fallback
     return {
         "title": ParagraphStyle(
-            "Title", parent=base["Heading1"], fontName="Helvetica-Bold",
+            "Title", parent=base["Heading1"], fontName=F["bold"],
             fontSize=18, leading=22, spaceAfter=4,
             textColor=colors.HexColor("#0f172a"),
         ),
         "subtitle": ParagraphStyle(
-            "Subtitle", parent=base["Normal"], fontName="Helvetica",
+            "Subtitle", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, spaceAfter=12,
             textColor=colors.HexColor("#475569"),
         ),
         "qheader": ParagraphStyle(
-            "QHeader", parent=base["Heading2"], fontName="Helvetica-Bold",
+            "QHeader", parent=base["Heading2"], fontName=F["bold"],
             fontSize=11, leading=14, spaceAfter=2,
             textColor=colors.HexColor("#1e293b"),
         ),
         "qmeta": ParagraphStyle(
-            "QMeta", parent=base["Normal"], fontName="Helvetica",
+            "QMeta", parent=base["Normal"], fontName=F["regular"],
             fontSize=8, leading=11, spaceAfter=4,
             textColor=colors.HexColor("#64748b"),
         ),
         "qprompt": ParagraphStyle(
-            "QPrompt", parent=base["Normal"], fontName="Helvetica",
+            "QPrompt", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, spaceAfter=6,
             textColor=colors.HexColor("#0f172a"),
         ),
         "answer_label": ParagraphStyle(
-            "AnsLabel", parent=base["Normal"], fontName="Helvetica-Bold",
+            "AnsLabel", parent=base["Normal"], fontName=F["bold"],
             fontSize=8, leading=10, spaceAfter=2,
             textColor=colors.HexColor("#475569"),
         ),
         "answer": ParagraphStyle(
-            "Ans", parent=base["Normal"], fontName="Helvetica",
+            "Ans", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, spaceAfter=12,
             leftIndent=8, rightIndent=8,
             backColor=colors.HexColor("#f8fafc"),
@@ -91,7 +93,7 @@ def _styles():
             textColor=colors.HexColor("#1e293b"),
         ),
         "answer_silent": ParagraphStyle(
-            "AnsSilent", parent=base["Normal"], fontName="Helvetica-Oblique",
+            "AnsSilent", parent=base["Normal"], fontName=F["italic"],
             fontSize=10, leading=14, spaceAfter=12,
             leftIndent=8, rightIndent=8,
             backColor=colors.HexColor("#fff7ed"),

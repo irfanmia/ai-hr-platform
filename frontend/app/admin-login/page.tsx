@@ -39,14 +39,14 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-900 px-6 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-ink-900 px-6 py-12">
       <div className="w-full max-w-md space-y-4">
         <div className="text-center mb-6 flex flex-col items-center gap-2">
           <BrandWordmark size="lg" inverse hideTld />
           <p className="text-slate-400 text-sm">HR Administrator Portal</p>
         </div>
 
-        <Card className="rounded-3xl border-slate-700 bg-slate-800">
+        <Card className="rounded-3xl border-ink-700 bg-ink-800">
           <CardHeader>
             <CardTitle className="text-white">Admin Login</CardTitle>
             <p className="text-sm text-slate-400">Restricted to authorised HR staff only.</p>
@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
                   placeholder="admin@aihr.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="border-slate-600 bg-slate-700 text-white placeholder:text-slate-500"
+                  className="border-ink-600 bg-ink-700 text-white placeholder:text-ink-400"
                   required
                 />
               </div>
@@ -71,7 +71,7 @@ export default function AdminLoginPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="border-slate-600 bg-slate-700 text-white placeholder:text-slate-500"
+                  className="border-ink-600 bg-ink-700 text-white placeholder:text-ink-400"
                   required
                 />
               </div>

@@ -28,58 +28,60 @@ from reportlab.platypus import (
 )
 
 from .branding import PdfMetadata, install_branding
+from .fonts import brand_fonts
 
 
 def _styles():
     base = getSampleStyleSheet()
+    F = brand_fonts()  # registered Mulish names, or Helvetica fallback
     return {
         "title": ParagraphStyle(
-            "Title", parent=base["Heading1"], fontName="Helvetica-Bold",
+            "Title", parent=base["Heading1"], fontName=F["bold"],
             fontSize=18, leading=22, spaceAfter=4,
             textColor=colors.HexColor("#0f172a"),
         ),
         "subtitle": ParagraphStyle(
-            "Subtitle", parent=base["Normal"], fontName="Helvetica",
+            "Subtitle", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, spaceAfter=12,
             textColor=colors.HexColor("#475569"),
         ),
         "section": ParagraphStyle(
-            "Section", parent=base["Heading2"], fontName="Helvetica-Bold",
+            "Section", parent=base["Heading2"], fontName=F["bold"],
             fontSize=12, leading=16, spaceBefore=14, spaceAfter=6,
             textColor=colors.HexColor("#1e293b"),
         ),
         "body": ParagraphStyle(
-            "Body", parent=base["Normal"], fontName="Helvetica",
+            "Body", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, spaceAfter=4,
             textColor=colors.HexColor("#1e293b"),
         ),
         "bullet": ParagraphStyle(
-            "Bullet", parent=base["Normal"], fontName="Helvetica",
+            "Bullet", parent=base["Normal"], fontName=F["regular"],
             fontSize=10, leading=14, leftIndent=14, bulletIndent=2, spaceAfter=2,
             textColor=colors.HexColor("#334155"),
         ),
         "score_big": ParagraphStyle(
-            "ScoreBig", parent=base["Normal"], fontName="Helvetica-Bold",
+            "ScoreBig", parent=base["Normal"], fontName=F["bold"],
             fontSize=42, leading=48, alignment=1,  # centre
             textColor=colors.HexColor("#048132"),  # brand green-900
         ),
         "score_label": ParagraphStyle(
-            "ScoreLabel", parent=base["Normal"], fontName="Helvetica",
+            "ScoreLabel", parent=base["Normal"], fontName=F["regular"],
             fontSize=9, leading=12, alignment=1,
             textColor=colors.HexColor("#64748b"),
         ),
         "rec_strong": ParagraphStyle(
-            "RecStrong", parent=base["Normal"], fontName="Helvetica-Bold",
+            "RecStrong", parent=base["Normal"], fontName=F["bold"],
             fontSize=14, leading=18, alignment=1, spaceBefore=4,
             textColor=colors.HexColor("#047857"),  # emerald-700
         ),
         "rec_consider": ParagraphStyle(
-            "RecConsider", parent=base["Normal"], fontName="Helvetica-Bold",
+            "RecConsider", parent=base["Normal"], fontName=F["bold"],
             fontSize=14, leading=18, alignment=1, spaceBefore=4,
             textColor=colors.HexColor("#b45309"),  # amber-700
         ),
         "rec_reject": ParagraphStyle(
-            "RecReject", parent=base["Normal"], fontName="Helvetica-Bold",
+            "RecReject", parent=base["Normal"], fontName=F["bold"],
             fontSize=14, leading=18, alignment=1, spaceBefore=4,
             textColor=colors.HexColor("#b91c1c"),  # red-700
         ),
@@ -114,11 +116,14 @@ def _bar_row(label: str, value: int, bar_color: str) -> Table:
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]),
     )
+    # _bar_row is called outside _styles() so we resolve the brand font
+    # locally — brand_fonts() is cached after first call, basically free.
+    _F = brand_fonts()
     return Table(
         [[
-            Paragraph(_esc(label), ParagraphStyle("L", fontName="Helvetica", fontSize=9, leading=11)),
+            Paragraph(_esc(label), ParagraphStyle("L", fontName=_F["regular"], fontSize=9, leading=11)),
             bar_track,
-            Paragraph(f"<b>{pct}</b>", ParagraphStyle("V", fontName="Helvetica", fontSize=9, leading=11, alignment=2)),
+            Paragraph(f"<b>{pct}</b>", ParagraphStyle("V", fontName=_F["regular"], fontSize=9, leading=11, alignment=2)),
         ]],
         colWidths=[55 * mm, bar_width + 4 * mm, 12 * mm],
         style=TableStyle([
@@ -226,18 +231,20 @@ def build_report_pdf(metadata: PdfMetadata, ai_report: dict) -> bytes:
             "partial":  "#f59e0b",
             "weak":     "#ef4444",
         }
+        # Resolve brand fonts once for the inline styles + table header
+        _F = brand_fonts()
         for c in claims[:20]:
             rows.append([
                 Paragraph(
                     f"<font color='{status_color.get(c.get('status'), '#64748b')}'><b>{_esc(c.get('status', '—').upper())}</b></font>",
-                    ParagraphStyle("X", fontName="Helvetica", fontSize=8, leading=10),
+                    ParagraphStyle("X", fontName=_F["regular"], fontSize=8, leading=10),
                 ),
-                Paragraph(_esc(c.get("claim", "")), ParagraphStyle("X", fontName="Helvetica", fontSize=9, leading=12)),
-                Paragraph(_esc(c.get("evidence", "")), ParagraphStyle("X", fontName="Helvetica", fontSize=9, leading=12)),
+                Paragraph(_esc(c.get("claim", "")), ParagraphStyle("X", fontName=_F["regular"], fontSize=9, leading=12)),
+                Paragraph(_esc(c.get("evidence", "")), ParagraphStyle("X", fontName=_F["regular"], fontSize=9, leading=12)),
             ])
         story.append(Table(rows, colWidths=[18 * mm, 60 * mm, 92 * mm], style=TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), _F["bold"]),
             ("FONTSIZE", (0, 0), (-1, 0), 8),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#475569")),
             ("LINEABOVE", (0, 1), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),

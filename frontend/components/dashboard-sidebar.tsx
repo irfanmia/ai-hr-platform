@@ -47,7 +47,7 @@ export function DashboardSidebar() {
         </div>
         {/* Close button — mobile only */}
         <button
-          className="ml-2 rounded-lg p-1.5 text-indigo-200 hover:bg-indigo-900 lg:hidden"
+          className="ml-2 rounded-lg p-1.5 text-indigo-200 hover:bg-ink-800 lg:hidden"
           onClick={() => setOpen(false)}
         >
           <X className="h-5 w-5" />
@@ -64,7 +64,7 @@ export function DashboardSidebar() {
               href={link.href}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition",
-                isActive ? "bg-white text-indigo-950" : "text-indigo-100 hover:bg-indigo-900"
+                isActive ? "bg-white text-indigo-950" : "text-indigo-100 hover:bg-ink-800"
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -76,7 +76,7 @@ export function DashboardSidebar() {
 
       <Button
         variant="outline"
-        className="mt-auto border-indigo-400 bg-transparent text-white hover:bg-indigo-900"
+        className="mt-auto border-indigo-400 bg-transparent text-white hover:bg-ink-800"
         onClick={handleLogout}
       >
         <LogOut className="mr-2 h-4 w-4" />
@@ -88,14 +88,14 @@ export function DashboardSidebar() {
   return (
     <>
       {/* ── Mobile top bar ── */}
-      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-indigo-950 px-4 py-3 text-white lg:hidden">
+      <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-ink-900 px-4 py-3 text-white lg:hidden">
         <div>
           <p className="text-xs font-medium text-indigo-300">Recruiter Console</p>
           <BrandWordmark size="sm" inverse hideTld />
         </div>
         <button
           onClick={() => setOpen(true)}
-          className="rounded-lg p-2 text-indigo-200 hover:bg-indigo-900"
+          className="rounded-lg p-2 text-indigo-200 hover:bg-ink-800"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -111,14 +111,14 @@ export function DashboardSidebar() {
 
       {/* ── Mobile drawer ── */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full w-72 bg-indigo-950 px-5 py-6 text-white transition-transform duration-300 lg:hidden",
+        "fixed top-0 left-0 z-50 h-full w-72 bg-ink-900 px-5 py-6 text-white transition-transform duration-300 lg:hidden",
         open ? "translate-x-0" : "-translate-x-full"
       )}>
         <SidebarContent />
       </aside>
 
       {/* ── Desktop sidebar ── */}
-      <aside className="hidden min-h-screen w-72 shrink-0 flex-col bg-indigo-950 px-5 py-6 text-white lg:flex">
+      <aside className="hidden min-h-screen w-72 shrink-0 flex-col bg-ink-900 px-5 py-6 text-white lg:flex">
         <SidebarContent />
       </aside>
     </>
