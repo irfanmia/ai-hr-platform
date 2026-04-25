@@ -258,4 +258,54 @@ export async function updateApplicationStatus(id: number, status: ApplicationSta
   return response.data;
 }
 
+/**
+ * Trigger an authenticated PDF download. Browsers can't send Authorization
+ * headers via <a href download>, so we fetch the PDF as a blob, build an
+ * object URL, and click a hidden anchor to trigger the save dialog.
+ *
+ * `kind`:
+ *   "responses" — Q&A only
+ *   "report"    — AI evaluation only
+ *   "combined"  — resume + responses + report merged
+ */
+export async function downloadApplicationPdf(
+  applicationId: number,
+  kind: "responses" | "report" | "combined",
+): Promise<void> {
+  const res = await api.get(`/dashboard/applications/${applicationId}/pdf/${kind}/`, {
+    responseType: "blob",
+  });
+  const blob = res.data as Blob;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  // Filename comes from Content-Disposition; use a fallback if not present
+  const cd = String(res.headers["content-disposition"] ?? "");
+  const m = cd.match(/filename="?([^";]+)"?/);
+  a.download = m?.[1] ?? `application_${applicationId}_${kind}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Public — used by the /verify page after a QR scan. No auth required.
+ */
+export interface VerifyResponse {
+  valid: boolean;
+  error?: string;
+  candidate_name?: string;
+  candidate_email?: string;
+  job_title?: string;
+  application_id?: number;
+  doc_type?: string;
+  issued_at?: string;
+  current_status?: string;
+}
+export async function verifyDocument(token: string): Promise<VerifyResponse> {
+  const response = await api.get<VerifyResponse>("/verify/", { params: { token } });
+  return response.data;
+}
+
 export default api;

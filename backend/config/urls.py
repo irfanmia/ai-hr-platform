@@ -5,6 +5,7 @@ from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from applications.auth_views import HRTokenObtainPairView, candidate_register, candidate_profile, update_profile
+from applications.views import VerifyDocumentView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -16,4 +17,6 @@ urlpatterns = [
     path("api/auth/profile/", candidate_profile, name="candidate_profile"),
     path("api/auth/profile/update/", update_profile, name="update_profile"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # Public — used by the QR code on every issued PDF for verification
+    path("api/verify/", VerifyDocumentView.as_view(), name="verify-document"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

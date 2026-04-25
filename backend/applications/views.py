@@ -1,4 +1,6 @@
+from datetime import datetime, timezone as tz
 from django.db.models import Avg, Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, response, status, views, viewsets
@@ -9,6 +11,13 @@ from ai_engine.audio_transcriber import TranscriptionError, transcribe_audio
 from ai_engine.question_generator import generate_interview_questions
 from ai_engine.report_generator import compile_ai_report
 from ai_engine.resume_parser import parse_resume_for_application
+from pdf_engine import (
+    PdfMetadata,
+    build_combined_pdf,
+    build_report_pdf,
+    build_responses_pdf,
+    parse_verify_token,
+)
 from .models import Application
 from .serializers import (
     ApplicationCreateSerializer,
@@ -16,6 +25,23 @@ from .serializers import (
     ApplicationStatusSerializer,
     SubmitAnswersSerializer,
 )
+
+
+def _safe_filename(s: str) -> str:
+    return "".join(c if c.isalnum() or c in "._- " else "_" for c in (s or "candidate")).strip().replace(" ", "_")[:60] or "candidate"
+
+
+def _build_pdf_metadata(app: Application, doc_type: str, doc_title: str) -> PdfMetadata:
+    return PdfMetadata(
+        candidate_name=app.candidate_name or "",
+        candidate_email=app.email or "",
+        job_title=(app.job.title if app.job else ""),
+        job_department=(app.job.department if app.job else ""),
+        application_id=app.id,
+        doc_type=doc_type,
+        doc_title=doc_title,
+        generated_at=datetime.now(tz=tz.utc),
+    )
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
@@ -319,4 +345,110 @@ class CandidateJobApplicationStatusView(views.APIView):
             "status": app.status,
             "has_report": app.ai_report is not None,
             "has_resume": bool(app.resume),
+        })
+
+
+# ─── PDF download endpoints (HR only) ─────────────────────────────────────
+
+class _ApplicationPdfBase(views.APIView):
+    """Common helper: load the application + ensure HR access + extract Q/A.
+
+    All three PDF endpoints inherit from this. Each subclass produces a
+    different PDF body via _build_pdf().
+    """
+    permission_classes = [permissions.IsAdminUser]
+    DOC_TYPE: str = "responses"
+    DOC_TITLE: str = "Document"
+    FILENAME_SUFFIX: str = "responses"
+
+    def _build_pdf(self, app: Application, metadata: PdfMetadata, questions, answers, scores):
+        raise NotImplementedError
+
+    def get(self, request, pk: int):
+        app = get_object_or_404(Application.objects.select_related("job"), pk=pk)
+        stored = app.custom_answers or {}
+        questions = stored.get("questions", []) or []
+        answers = stored.get("submitted_answers", {}) or {}
+        # Pull per-question scores out of the cached evaluation if present
+        evaluation = stored.get("evaluation") or {}
+        scored_answers = evaluation.get("scored_answers") or []
+        scores = {s.get("question_id"): s.get("score") for s in scored_answers if s.get("question_id")}
+
+        metadata = _build_pdf_metadata(app, self.DOC_TYPE, self.DOC_TITLE)
+
+        try:
+            pdf_bytes = self._build_pdf(app, metadata, questions, answers, scores)
+        except Exception as exc:  # noqa: BLE001
+            return response.Response(
+                {"error": "pdf_generation_failed", "message": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        filename = f"{_safe_filename(app.candidate_name)}_{self.FILENAME_SUFFIX}_app{app.id}.pdf"
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        resp["Content-Length"] = str(len(pdf_bytes))
+        return resp
+
+
+class ApplicationResponsesPDFView(_ApplicationPdfBase):
+    DOC_TYPE = "responses"
+    DOC_TITLE = "Interview Responses"
+    FILENAME_SUFFIX = "responses"
+
+    def _build_pdf(self, app, metadata, questions, answers, scores):
+        return build_responses_pdf(metadata, questions, answers, scores)
+
+
+class ApplicationReportPDFView(_ApplicationPdfBase):
+    DOC_TYPE = "report"
+    DOC_TITLE = "AI Evaluation Report"
+    FILENAME_SUFFIX = "report"
+
+    def _build_pdf(self, app, metadata, questions, answers, scores):
+        return build_report_pdf(metadata, app.ai_report or {})
+
+
+class ApplicationCombinedPDFView(_ApplicationPdfBase):
+    DOC_TYPE = "combined"
+    DOC_TITLE = "Document Pack"
+    FILENAME_SUFFIX = "documentpack"
+
+    def _build_pdf(self, app, metadata, questions, answers, scores):
+        return build_combined_pdf(app, metadata, questions, answers, scores)
+
+
+# ─── Public verification endpoint ─────────────────────────────────────────
+
+class VerifyDocumentView(views.APIView):
+    """Public — anyone with a token (e.g. someone who scanned the QR on the
+    PDF) can call this to confirm the document was issued by us. Returns
+    minimal metadata so HR can sanity-check the doc against what they see
+    in their dashboard, without leaking any extra PII."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get("token", "")
+        parsed = parse_verify_token(token)
+        if not parsed:
+            return response.Response(
+                {"valid": False, "error": "invalid_or_tampered_token"},
+                status=status.HTTP_200_OK,
+            )
+        try:
+            app = Application.objects.select_related("job").get(pk=parsed["application_id"])
+        except Application.DoesNotExist:
+            return response.Response(
+                {"valid": False, "error": "application_not_found"},
+                status=status.HTTP_200_OK,
+            )
+        return response.Response({
+            "valid": True,
+            "candidate_name": app.candidate_name,
+            "candidate_email": app.email,
+            "job_title": (app.job.title if app.job else None),
+            "application_id": app.id,
+            "doc_type": parsed["doc_type"],
+            "issued_at": parsed["generated_at"].isoformat(),
+            "current_status": app.status,
         })

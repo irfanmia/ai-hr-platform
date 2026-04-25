@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Download, FileText, Printer } from "lucide-react";
+import { CheckCircle2, ChevronDown, Download, FileText, MessageSquareText, Printer } from "lucide-react";
 import { use, useEffect, useRef, useState } from "react";
 
 import { ClaimValidationList } from "@/components/claim-validation-list";
@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDashboardApplication, updateApplicationStatus } from "@/lib/api";
+import { downloadApplicationPdf, getDashboardApplication, updateApplicationStatus } from "@/lib/api";
 import type { Application, ApplicationStatus } from "@/lib/types";
+
+type PdfKind = "responses" | "report" | "combined";
 
 export default function ApplicationDetailPage({ params }: { params: any }) {
   const resolvedParams = typeof params.then === "function" ? use(params) : params;
@@ -20,6 +22,24 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
   const [application, setApplication] = useState<Application | null>(null);
   const [status, setStatus] = useState<ApplicationStatus>("new");
   const printRef = useRef<HTMLDivElement>(null);
+  const [showResponses, setShowResponses] = useState(false);
+  const [downloading, setDownloading] = useState<PdfKind | null>(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
+  async function handleDownload(kind: PdfKind) {
+    if (!application) return;
+    setDownloading(kind);
+    setDownloadOpen(false);
+    try {
+      await downloadApplicationPdf(application.id, kind);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("PDF download failed:", err);
+      alert("Couldn't generate that PDF. Try again or check the server logs.");
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   useEffect(() => {
     getDashboardApplication(id).then((data) => {
@@ -105,20 +125,167 @@ export default function ApplicationDetailPage({ params }: { params: any }) {
       `}</style>
 
       {/* Action buttons — top right */}
-      <div className="no-print mb-4 flex justify-end gap-3">
+      <div className="no-print mb-4 flex flex-wrap items-center justify-end gap-3">
+        <Button
+          variant={showResponses ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowResponses((v) => !v)}
+        >
+          <MessageSquareText className="mr-2 h-4 w-4" />
+          {showResponses ? "Hide responses" : "View responses"}
+        </Button>
         <Button variant="outline" size="sm" onClick={handleDownloadResume} disabled={!application.resume_url}>
           <FileText className="mr-2 h-4 w-4" />
-          Download Resume
+          Resume only
         </Button>
         <Button variant="outline" size="sm" onClick={handlePrintReport} disabled={!report}>
           <Printer className="mr-2 h-4 w-4" />
-          Print Report
+          Print
         </Button>
-        <Button size="sm" onClick={handlePrintReport} disabled={!report}>
-          <Download className="mr-2 h-4 w-4" />
-          Download PDF
-        </Button>
+
+        {/* Download dropdown — Responses / Report / Everything */}
+        <div className="relative">
+          <Button
+            size="sm"
+            onClick={() => setDownloadOpen((v) => !v)}
+            disabled={downloading !== null}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {downloading
+              ? `Generating ${downloading}…`
+              : "Download PDF"}
+            <ChevronDown className="ml-1 h-3 w-3" />
+          </Button>
+          {downloadOpen && (
+            <div className="absolute right-0 top-full z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+              <button
+                onClick={() => handleDownload("responses")}
+                className="flex w-full items-start gap-2 px-4 py-3 text-left hover:bg-slate-50"
+                disabled={!report}
+              >
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Responses only</p>
+                  <p className="text-xs text-slate-500">Q&amp;A in text form</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleDownload("report")}
+                className="flex w-full items-start gap-2 border-t border-slate-100 px-4 py-3 text-left hover:bg-slate-50"
+                disabled={!report}
+              >
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">AI report only</p>
+                  <p className="text-xs text-slate-500">Score, gaps, recommendation</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleDownload("combined")}
+                className="flex w-full items-start gap-2 border-t border-slate-100 bg-indigo-50/40 px-4 py-3 text-left hover:bg-indigo-50"
+                disabled={!report}
+              >
+                <Download className="mt-0.5 h-4 w-4 shrink-0 text-indigo-700" />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">Everything (one PDF)</p>
+                  <p className="text-xs text-slate-500">Resume + responses + report, merged</p>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ── Inline responses viewer (HR can read Q&A without downloading) ── */}
+      {showResponses && (() => {
+        const stored = (application.custom_answers as any) || {};
+        const qs: any[] = stored.questions || [];
+        const ans: Record<string, string> = stored.submitted_answers || {};
+        const evalData = stored.evaluation || {};
+        const scoredById: Record<string, number> = Object.fromEntries(
+          (evalData.scored_answers || []).map((s: any) => [s.question_id, s.score])
+        );
+        const TYPE_LABEL: Record<string, string> = {
+          descriptive: "Descriptive",
+          scenario: "Scenario",
+          coding: "Coding",
+          mcq: "Multiple choice",
+          one_word: "One word",
+        };
+        return (
+          <Card className="no-print mb-6 rounded-3xl border-indigo-100">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Interview responses ({qs.length})</span>
+                <span className="text-xs font-normal text-slate-500">
+                  Scores shown are per-question (out of 100)
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {qs.length === 0 && (
+                <p className="text-sm text-slate-500">
+                  No questions were generated for this application.
+                </p>
+              )}
+              {qs.map((q, idx) => {
+                const a = (ans[q.id] || "").trim();
+                const isSilent = !a || a === "[no response]";
+                const isCode = q.type === "coding";
+                const score = scoredById[q.id];
+                return (
+                  <div key={q.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs uppercase tracking-wider text-slate-500">
+                        Q{idx + 1} · {TYPE_LABEL[q.type] ?? q.type}
+                      </div>
+                      {typeof score === "number" && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            score >= 78 ? "bg-emerald-100 text-emerald-700"
+                            : score >= 62 ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {score}/100
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">{q.prompt}</p>
+                    {q.type === "mcq" && Array.isArray(q.options) && (
+                      <ul className="mt-2 ml-4 list-disc text-xs text-slate-500">
+                        {q.options.map((opt: string) => (
+                          <li key={opt} className={a === opt ? "font-semibold text-slate-800" : ""}>
+                            {opt}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        Answer
+                      </p>
+                      {isSilent ? (
+                        <p className="mt-1 italic rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          No response — candidate did not answer this question.
+                        </p>
+                      ) : isCode ? (
+                        <pre className="mt-1 overflow-x-auto rounded-xl bg-slate-900 px-3 py-2 font-mono text-xs leading-5 text-emerald-50">
+                          {a}
+                        </pre>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                          {a}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <div id="printable-report" ref={printRef}>
 
