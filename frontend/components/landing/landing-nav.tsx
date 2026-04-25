@@ -331,9 +331,13 @@ export function LandingNav() {
   return (
     <header className={`nav${scrolled ? " scrolled" : ""}`}>
       <div className="wrap nav-inner">
-        <Link href="/" className="logo">
-          <span className="logo-mark" />
-          <span>HireParrot</span>
+        <Link href="/" className="logo" aria-label="HireParrot home">
+          <img
+            src="/brand/hireparrot-wordmark.svg"
+            alt="HireParrot"
+            height={32}
+            style={{ height: 32, width: "auto", display: "block" }}
+          />
         </Link>
         <nav className="nav-links">
           {NAV_LINKS.map((l) => (

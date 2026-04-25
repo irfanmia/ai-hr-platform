@@ -1,93 +1,49 @@
 /**
  * HireParrot brand primitives — wordmark + standalone mark.
  *
- * The mark is a low-poly origami-style parrot, traced from the user-supplied
- * source artwork. Two variants:
- *   - "filled"  (default) — solid silhouette, best at small sizes (nav,
- *                            favicon, button avatars). Reads cleanly down
- *                            to ~16px.
- *   - "outline" — line-art version of the same paths, used when the
- *                 brand wants more breathing room (hero sections, big
- *                 splash blocks). Stroke uses currentColor.
+ * Both components render the SVG assets at /public/brand/. The wordmark
+ * is the full lockup (orange parrot + "HireParrot" type). The mark is
+ * the parrot only, square-ish viewBox — used for favicons, button
+ * avatars, and tight slots where the wordmark is too wide.
  *
- * Renders in brand green by default; pass `inverse` to flip to white-on-dark
- * for the dashboard sidebar.
- *
- * If we later want to swap to the original PNG artwork (e.g. you upload
- * `/public/brand/parrot-filled.png`), replace the <svg> inside <BrandMark/>
- * with <img src="/brand/parrot-filled.png" …/>; the CSS-driven recolor
- * trick (filter: brightness(0) saturate(100%) invert(…) sepia(…)…) can be
- * tricky for arbitrary brand greens, so prefer SVG when feasible.
+ * The orange parrot keeps its colour in both light and dark contexts;
+ * only the "HireParrot" word switches (black on light, white on dark)
+ * via the `inverse` prop, which selects the alt SVG file.
  */
 
 import { cn } from "@/lib/utils";
 
+const WORDMARK_SRC = {
+  default: "/brand/hireparrot-wordmark.svg",       // orange mark + black text
+  inverse: "/brand/hireparrot-wordmark-light.svg", // orange mark + white text
+};
+const MARK_SRC = "/brand/hireparrot-mark.svg";
+
 export interface BrandMarkProps {
   className?: string;
+  /** Pixel size for both width + height (mark is square-ish, ~1.56:1). */
   size?: number;
-  /** Outline variant for hero/large display contexts. Default false. */
+  /** Kept for API compatibility — the SVG asset already has the brand
+   *  orange baked in, so this prop is a no-op now. */
   outline?: boolean;
-  /** Inverse colour for dark surfaces (sidebar). */
+  /** Kept for API compat. */
   inverse?: boolean;
 }
 
-/**
- * Geometric parrot mark — bird in profile, facing right, with a long
- * down-left tail. Composed of polygons that stack like origami folds.
- *
- * Coordinates traced approximately from the supplied source artwork.
- * The mark sits inside a 100×100 viewBox; any rendering size scales it.
- */
 export function BrandMark({
   className,
   size = 28,
-  outline = false,
-  inverse = false,
+  // outline + inverse intentionally ignored — see above.
 }: BrandMarkProps) {
-  // Brand green-700 by default. Inverse → currentColor (lets the dark
-  // sidebar drive the colour through `text-white`).
-  const fill = inverse ? "currentColor" : "#1EAA50";
-  const accent = inverse ? "currentColor" : "#048132";
-
-  // For the outline variant we use stroke instead of fill. Stroke width
-  // is tuned so it looks balanced at small sizes without going hairline.
-  const strokeProps = outline
-    ? { fill: "none", stroke: fill, strokeWidth: 4, strokeLinejoin: "round" as const, strokeLinecap: "round" as const }
-    : { fill, stroke: "none" };
-
   return (
-    <svg
-      viewBox="0 0 100 100"
+    <img
+      src={MARK_SRC}
+      alt=""
       width={size}
       height={size}
       className={cn("inline-block shrink-0", className)}
-      role="img"
-      aria-label="HireParrot mark"
-    >
-      {/* Top back/wing stripe — parallelogram */}
-      <polygon points="55,24 78,22 82,30 60,33" {...strokeProps} />
-
-      {/* Middle wing stripe — wider parallelogram */}
-      <polygon points="50,36 80,30 86,42 56,47" {...strokeProps} />
-
-      {/* Bottom body wedge */}
-      <polygon points="56,47 86,42 78,55 60,55" {...strokeProps} />
-
-      {/* Beak — small forward-pointing triangle */}
-      <polygon points="80,22 92,28 80,30" {...strokeProps} />
-
-      {/* Tail — long thin parallelogram heading down-left */}
-      <polygon points="14,80 24,72 52,46 42,54" {...strokeProps} />
-
-      {/* Chest droplet — small downward triangle below the body */}
-      <polygon points="64,55 70,68 67,55" {...(outline ? strokeProps : { fill: accent, stroke: "none" })} />
-
-      {/* Eye — tiny dot, only visible on filled variant (negative space
-          inside the head reads as the eye). Skipped on outline. */}
-      {!outline && (
-        <circle cx="78" cy="27" r="0.9" fill="#FFFFFF" />
-      )}
-    </svg>
+      style={{ height: size, width: "auto", display: "inline-block" }}
+    />
   );
 }
 
@@ -95,46 +51,32 @@ export interface BrandWordmarkProps {
   className?: string;
   size?: "sm" | "md" | "lg";
   inverse?: boolean;
+  /** Legacy props from the old name.com-style wordmark — no longer
+   *  meaningful (the SVG is one piece). Kept so existing call sites
+   *  don't break TypeScript. */
   hideMark?: boolean;
   hideTld?: boolean;
 }
 
-const sizeClasses = {
-  sm: "text-base",
-  md: "text-lg",
-  lg: "text-2xl",
+const HEIGHTS_PX: Record<NonNullable<BrandWordmarkProps["size"]>, number> = {
+  sm: 22,
+  md: 32,
+  lg: 44,
 };
-const markSizes = { sm: 22, md: 28, lg: 38 };
 
-/**
- * Full wordmark: parrot mark + "hireparrot" + ".com" accent.
- * Inspired by name.com's lowercase Proxima-Bold-with-tld treatment.
- */
 export function BrandWordmark({
   className,
   size = "md",
   inverse = false,
-  hideMark = false,
-  hideTld = false,
 }: BrandWordmarkProps) {
+  const h = HEIGHTS_PX[size];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-2 font-bold tracking-tight",
-        sizeClasses[size],
-        inverse ? "text-white" : "text-slate-900",
-        className,
-      )}
-    >
-      {!hideMark && <BrandMark size={markSizes[size]} inverse={inverse} />}
-      <span className="select-none">
-        hireparrot
-        {!hideTld && (
-          <span className={inverse ? "text-indigo-300" : "text-indigo-700"}>
-            .com
-          </span>
-        )}
-      </span>
-    </span>
+    <img
+      src={inverse ? WORDMARK_SRC.inverse : WORDMARK_SRC.default}
+      alt="HireParrot"
+      height={h}
+      className={cn("inline-block shrink-0 select-none", className)}
+      style={{ height: h, width: "auto", display: "inline-block" }}
+    />
   );
 }

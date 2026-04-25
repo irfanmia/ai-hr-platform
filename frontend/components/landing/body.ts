@@ -910,9 +910,8 @@ not pedigree.</h2>
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <a href="#" class="logo" style="margin-bottom: 14px;">
-          <span class="logo-mark"></span>
-          <span>HireParrot</span>
+        <a href="/" class="logo" style="margin-bottom: 14px;" aria-label="HireParrot home">
+          <img src="/brand/hireparrot-wordmark.svg" alt="HireParrot" style="height: 32px; width: auto; display: block;" />
         </a>
         <p class="foot-brand">AI-graded video interviews with verifiable, signed reports. Hire from how they answer.</p>
       </div>
