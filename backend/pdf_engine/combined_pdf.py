@@ -170,7 +170,10 @@ def build_combined_pdf(
         doc_type="combined",
         doc_title="Document Pack — AI Report",
     )
-    report_bytes = build_report_pdf(report_meta, application.ai_report or {})
+    report_bytes = build_report_pdf(
+        report_meta, application.ai_report or {},
+        identity_snapshots=identity_snapshots,
+    )
 
     # ─── Merge ───────────────────────────────────────────────────────────
     writer = PdfWriter()

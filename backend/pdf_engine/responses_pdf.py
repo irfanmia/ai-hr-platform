@@ -199,31 +199,44 @@ def build_responses_pdf(
         if snap.get("abs_path") and os.path.exists(snap["abs_path"])
     ]
     if valid_snaps:
-        from reportlab.platypus import Image as _Image
+        from reportlab.lib import colors as _colors
+        from reportlab.platypus import (
+            Image as _Image,
+            Table as _Table,
+            TableStyle as _TableStyle,
+        )
         story.append(Paragraph("Identity Verification", s["qheader"]))
         story.append(Paragraph(
             f"{len(valid_snaps)} still frame(s) captured at random moments during the interview "
-            "for HR identity verification.",
+            "for HR identity verification. The candidate was informed before the interview began.",
             s["qmeta"],
         ))
-        # Lay out snapshots as a horizontal row of 3-4 thumbnails
-        thumb_w = 50 * mm
-        thumb_h = thumb_w * 0.75  # 4:3 aspect
-        cols: list = []
-        for snap in valid_snaps[:6]:
+        thumb_w = 44 * mm
+        thumb_h = thumb_w * 0.75  # 4:3
+        cells: list = []
+        for snap in valid_snaps[:8]:
             try:
                 img = _Image(snap["abs_path"], width=thumb_w, height=thumb_h)
-                cols.append(img)
+                # Wrap in a 1-cell table for a clean, equal-weight border
+                framed = _Table(
+                    [[img]],
+                    colWidths=[thumb_w], rowHeights=[thumb_h],
+                    style=_TableStyle([
+                        ("BOX",           (0, 0), (-1, -1), 0.6, _colors.HexColor("#94a3b8")),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ]),
+                )
+                cells.append(framed)
             except Exception:
                 continue
-        if cols:
-            from reportlab.platypus import Table as _Table, TableStyle as _TableStyle
-            from reportlab.lib import colors as _colors
-            # Pad to 3 cells per row for a clean grid
+        if cells:
+            row_size = 4
             rows: list[list] = []
-            row_size = 3
-            for i in range(0, len(cols), row_size):
-                row = cols[i:i + row_size]
+            for i in range(0, len(cells), row_size):
+                row = list(cells[i:i + row_size])
                 while len(row) < row_size:
                     row.append("")
                 rows.append(row)
@@ -231,11 +244,10 @@ def build_responses_pdf(
                 rows,
                 colWidths=[thumb_w + 4 * mm] * row_size,
                 style=_TableStyle([
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
                     ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                    ("LINEBELOW", (0, 0), (-1, -1), 0.3, _colors.HexColor("#e2e8f0")),
                 ]),
             ))
         story.append(Spacer(1, 8))

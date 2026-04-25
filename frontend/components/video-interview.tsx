@@ -101,14 +101,21 @@ export function useInterviewCamera(): CameraState {
 // ─── Identity snapshot scheduler ─────────────────────────────────────────
 
 /**
- * Capture N still frames from the live camera stream at *random* intervals
- * across the lifetime of this hook, JPEG-encode them, and POST to the
+ * Capture still frames from the live camera stream at *random* moments
+ * inside short, front-loaded windows. JPEG-encode and POST to the
  * identity-snapshot endpoint. Random timing matters — predictable timing
  * (e.g. always at second 30) lets a candidate "show their face on cue"
  * and then swap with someone else.
  *
- * This is fire-and-forget: failures are silently swallowed so they never
- * affect the interview. Ceiling enforced both client-side (this hook) and
+ * Timing is front-loaded because real interviews are often shorter than
+ * we expect (60-120 seconds, not 6 minutes). We schedule three captures
+ * across the first ~90 seconds so even fast candidates produce ≥2:
+ *   - capture 1: random in 3-15s   (fires for any interview ≥15s)
+ *   - capture 2: random in 15-50s  (fires for any interview ≥50s)
+ *   - capture 3: random in 50-100s (only on longer interviews)
+ *
+ * Fire-and-forget: failures are silently swallowed so they never affect
+ * the interview. Ceiling enforced both client-side (this hook) and
  * server-side (max 6 per application). Job-level disable is enforced
  * server-side, so passing `enabled=true` here is always safe.
  *
@@ -121,15 +128,15 @@ export function useIdentitySnapshots({
   stream,
   enabled,
   armed,
-  count = 3,
-  windowSeconds = 360, // expected total interview duration; we spread captures across this
+  /** Override the default capture schedule (each entry is [minMs, maxMs]).
+   *  Default is the front-loaded 3-shot pattern described above. */
+  schedule,
 }: {
   applicationId: number | null;
   stream: MediaStream | null;
   enabled: boolean;
   armed: boolean;
-  count?: number;
-  windowSeconds?: number;
+  schedule?: Array<[number, number]>;
 }) {
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -140,13 +147,14 @@ export function useIdentitySnapshots({
 
     if (!enabled || !armed || !stream || applicationId == null) return;
 
-    // Divide the window into `count` equal slices, then pick one random
-    // moment inside each slice so captures are spread out but unpredictable.
-    const sliceMs = (windowSeconds * 1000) / count;
-    for (let i = 0; i < count; i++) {
-      const minOffset = i * sliceMs + 4000; // small head-start so the first capture isn't too early
-      const maxOffset = (i + 1) * sliceMs;
-      const at = minOffset + Math.random() * Math.max(0, maxOffset - minOffset);
+    const windows: Array<[number, number]> = schedule ?? [
+      [3000,  15000],   // first 15s (almost always fires)
+      [15000, 50000],   // 15-50s (fires for typical interviews)
+      [50000, 100000],  // 50-100s (longer interviews)
+    ];
+
+    for (const [minMs, maxMs] of windows) {
+      const at = minMs + Math.random() * Math.max(0, maxMs - minMs);
       const t = setTimeout(() => {
         captureFrameAndUpload(applicationId, stream).catch(() => {});
       }, at);

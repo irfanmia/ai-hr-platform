@@ -520,7 +520,10 @@ class ApplicationReportPDFView(_ApplicationPdfBase):
     FILENAME_SUFFIX = "report"
 
     def _build_pdf(self, app, metadata, questions, answers, scores):
-        return build_report_pdf(metadata, app.ai_report or {})
+        return build_report_pdf(
+            metadata, app.ai_report or {},
+            identity_snapshots=getattr(app, "_snaps_for_pdf", None),
+        )
 
 
 class ApplicationCombinedPDFView(_ApplicationPdfBase):

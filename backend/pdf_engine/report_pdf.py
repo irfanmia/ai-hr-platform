@@ -11,6 +11,7 @@ generates it.
 from __future__ import annotations
 
 import io
+import os
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -143,8 +144,16 @@ def _color_for_score(value) -> str:
     return "#ef4444"               # red-500
 
 
-def build_report_pdf(metadata: PdfMetadata, ai_report: dict) -> bytes:
-    """Build the AI evaluation report PDF from the saved ai_report JSON."""
+def build_report_pdf(
+    metadata: PdfMetadata,
+    ai_report: dict,
+    identity_snapshots: list[dict] | None = None,
+) -> bytes:
+    """Build the AI evaluation report PDF from the saved ai_report JSON.
+
+    `identity_snapshots` (optional) is a list of dicts:
+        [{"abs_path": "/var/.../media/...", "captured_at": "<iso>"}]
+    Caller resolves MEDIA_ROOT; this module stays Django-decoupled."""
     buf = io.BytesIO()
 
     margin_top = 26 * mm
@@ -199,6 +208,67 @@ def build_report_pdf(metadata: PdfMetadata, ai_report: dict) -> bytes:
         Paragraph(_esc(rec) or "No recommendation", rec_style),
     ]
     story.append(KeepTogether(score_block))
+
+    # ─── Identity verification snapshots ─────────────────────────────────
+    # Small framed thumbnails so HR can quickly confirm "right person" before
+    # reading the AI analysis. Renders only when frames actually exist.
+    valid_snaps = [
+        snap for snap in (identity_snapshots or [])
+        if snap.get("abs_path") and os.path.exists(snap["abs_path"])
+    ]
+    if valid_snaps:
+        from reportlab.platypus import Image as _Image
+        story.append(Paragraph("Identity Verification", s["section"]))
+        story.append(Paragraph(
+            f"{len(valid_snaps)} still frame(s) captured at random moments during the "
+            "interview. The candidate was informed that this would happen.",
+            s["body"],
+        ))
+        # Smaller frames in the report (HR uses these as a quick visual check,
+        # not a deep dive). 36 mm wide ≈ 4-up across the content area.
+        thumb_w = 36 * mm
+        thumb_h = thumb_w * 0.75  # 4:3
+        cells: list = []
+        for snap in valid_snaps[:8]:
+            try:
+                img = _Image(snap["abs_path"], width=thumb_w, height=thumb_h)
+                # Wrap each image in a single-cell table to give it a clean
+                # 1-pt border (the "frame") + a tiny caption underneath.
+                from reportlab.platypus import Table as _T, TableStyle as _TS
+                framed = _T(
+                    [[img]],
+                    colWidths=[thumb_w],
+                    rowHeights=[thumb_h],
+                    style=_TS([
+                        ("BOX",       (0, 0), (-1, -1), 0.6, colors.HexColor("#94a3b8")),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                    ]),
+                )
+                cells.append(framed)
+            except Exception:
+                continue
+        if cells:
+            from reportlab.platypus import Table as _Table, TableStyle as _TableStyle
+            row_size = 4
+            rows: list[list] = []
+            for i in range(0, len(cells), row_size):
+                row = list(cells[i:i + row_size])
+                while len(row) < row_size:
+                    row.append("")
+                rows.append(row)
+            story.append(_Table(
+                rows,
+                colWidths=[thumb_w + 4 * mm] * row_size,
+                style=_TableStyle([
+                    ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]),
+            ))
 
     # ─── Resume vs Performance ───────────────────────────────────────────
     rs = int(ai_report.get("resume_strength_score") or 0)
